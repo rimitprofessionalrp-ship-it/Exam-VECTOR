@@ -48,7 +48,7 @@
     const correctAnswers = {
       q1: "C", q2: "B", q3: "C", q4: "B", q5: "B",
       q6: "C", q7: "B", q8: "B", q9: "A", q10: "B",
-      q11: "B", q12: "B", q13: "B", q14: "C", q15: "B",
+      q11: "B", q12: "A", q13: "B", q14: "C", q15: "B",
       q16: "A", q17: "B", q18: "B", q19: "B", q20: "C",
       q21: "B", q22: "B", q23: "C", q24: "B", q25: "B"
     };
@@ -82,7 +82,6 @@
             showScreen('profileSetupScreen');
           } catch (err) {
             console.error("Auth Error (Silent):", err);
-            // ব্যাকগ্রাউন্ড ট্রাই এররে ফাউল পপ-আপ দেখানো হবে না
             showScreen('profileSetupScreen');
           }
         }
@@ -164,7 +163,7 @@
           warningCount++;
           document.getElementById('warningText').innerText = `ট্যাব পরিবর্তন: ${warningCount}/২`;
           
-          if (warningCount >= 3) {
+          if (warningCount >= 2) {
             showModal("⚠️ সতর্কতা! একাধিকবার ট্যাব পরিবর্তন করায় পরীক্ষা স্বয়ংক্রিয়ভাবে জমা হয়েছে!");
             submitExam(true);
           } else {
@@ -410,7 +409,27 @@
     .lb-score { color: var(--blue-marker); font-weight: 700; font-size: 1.1rem; text-align: center;}
     .rank-badge { display: inline-block; background: #e2e8f0; padding: 2px 8px; border-radius: 12px; font-weight: bold; font-size: 0.85rem; }
 
-    .footer-notice { text-align: center; padding: 15px; background: #0f172a; color: #cbd5e1; font-size: 0.85rem; font-weight: 600; }
+    /* গোল্ডেন ও ব্ল্যাক শেড ফুটার স্টাইল */
+    .footer-notice { 
+      text-align: center; 
+      padding: 16px 20px; 
+      background: linear-gradient(135deg, #090a0f 0%, #171922 50%, #050608 100%); 
+      color: #e2e8f0; 
+      font-size: 0.9rem; 
+      font-weight: 600; 
+      border-top: 2px solid #d4af37;
+      box-shadow: inset 0 1px 3px rgba(255, 215, 0, 0.15);
+      letter-spacing: 0.5px;
+    }
+    .golden-text {
+      background: linear-gradient(135deg, #bf953f 0%, #fcf6ba 25%, #b38728 50%, #fbf5b7 75%, #aa771c 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      font-weight: 800;
+      font-size: 1.05rem;
+      display: inline-block;
+      text-shadow: 0 0 12px rgba(212, 175, 55, 0.3);
+    }
 
     .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.75); display: none; justify-content: center; align-items: center; z-index: 1000; backdrop-filter: blur(4px); }
     .modal-content { background: white; padding: 25px; border-radius: 12px; max-width: 380px; text-align: center; width: 90%; }
@@ -462,7 +481,7 @@
         <form id="quizForm">
           
           <div class="mcq-card" id="qCard-1">
-            <div class="question-title">১. নিচের কোনটি ভেক্টর রাশি নয়? (সি. বো. ২৪)</div>
+            <div class="question-title">১. নিচের কোনটি ভেক্টর রাশি নয়?</div>
             <div class="options-grid">
               <label class="option-label"><input type="radio" name="q1" value="A"> বেগ</label>
               <label class="option-label"><input type="radio" name="q1" value="B"> ত্বরণ</label>
@@ -476,7 +495,7 @@
           </div>
 
           <div class="mcq-card" id="qCard-2">
-            <div class="question-title">২. দুটি সমমানের ভেক্টরের লব্ধির মান তাদের যেকোনো একটির মানের সমান হলে ভেক্টরদ্বয়ের মধ্যবর্তী কোণ কত? (ঢাকা বো. ২৩)</div>
+            <div class="question-title">২. দুটি সমমানের ভেক্টরের লব্ধির মান তাদের যেকোনো একটির মানের সমান হলে ভেক্টরদ্বয়ের মধ্যবর্তী কোণ কত?</div>
             <div class="options-grid">
               <label class="option-label"><input type="radio" name="q2" value="A"> \( 60^\circ \)</label>
               <label class="option-label"><input type="radio" name="q2" value="B"> \( 120^\circ \)</label>
@@ -492,7 +511,7 @@
           </div>
 
           <div class="mcq-card" id="qCard-3">
-            <div class="question-title">৩. \( \vec{A} = 3\hat{i} - 4\hat{j} \) ভেক্টরটির মান কত? (যশোর বো. ২২)</div>
+            <div class="question-title">৩. \( \vec{A} = 3\hat{i} - 4\hat{j} \) ভেক্টরটির মান কত?</div>
             <div class="options-grid">
               <label class="option-label"><input type="radio" name="q3" value="A"> 3 একক</label>
               <label class="option-label"><input type="radio" name="q3" value="B"> 4 একক</label>
@@ -501,12 +520,12 @@
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • মান নির্ণয়: \( |\vec{A}| = \sqrt{3^2 + (-4)^2} = \sqrt{9 + 16} = \sqrt{25} = \mathbf{5} \) একক।
+              • মান নির্ণয়: \( |\vec{A}| = \sqrt{3^2 + (-4)^2} = \mathbf{5} \) একক।
             </div>
           </div>
 
           <div class="mcq-card" id="qCard-4">
-            <div class="question-title">৪. দুটি ভেক্টরের ডট গুণফল শূন্য হলে ভেক্টরদ্বয় কীরূপে থাকে? (কুমিল্লা বো. ২১)</div>
+            <div class="question-title">৪. দুটি ভেক্টরের ডট গুণফল শূন্য হলে ভেক্টরদ্বয় কীরূপে থাকে?</div>
             <div class="options-grid">
               <label class="option-label"><input type="radio" name="q4" value="A"> সমান্তরাল</label>
               <label class="option-label"><input type="radio" name="q4" value="B"> পরস্পর লম্ব</label>
@@ -520,7 +539,7 @@
           </div>
 
           <div class="mcq-card" id="qCard-5">
-            <div class="question-title">৫. দুটি ভেক্টরের ক্রস গুণফল শূন্য হলে ভেক্টরদ্বয় কীরূপে থাকে? (রাজশাহী বো. ২৩)</div>
+            <div class="question-title">৫. দুটি ভেক্টরের ক্রস গুণফল শূন্য হলে ভেক্টরদ্বয় কীরূপে থাকে?</div>
             <div class="options-grid">
               <label class="option-label"><input type="radio" name="q5" value="A"> লম্ব</label>
               <label class="option-label"><input type="radio" name="q5" value="B"> সমান্তরাল</label>
@@ -618,31 +637,35 @@
             </div>
           </div>
 
+          <!-- নতুন ১২ নম্বর প্রশ্ন -->
           <div class="mcq-card" id="qCard-12">
-            <div class="question-title">১২. একক ভেক্টরের মান কত হয়?</div>
+            <div class="question-title">১২. \( \vec{A} = 2\hat{i} + \hat{j} - 2\hat{k} \) ভেক্টরের দিকে একক ভেক্টর কোনটি?</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q12" value="A"> 0</label>
-              <label class="option-label"><input type="radio" name="q12" value="B"> 1</label>
-              <label class="option-label"><input type="radio" name="q12" value="C"> অসীম</label>
-              <label class="option-label"><input type="radio" name="q12" value="D"> ±1</label>
+              <label class="option-label"><input type="radio" name="q12" value="A"> \( \frac{1}{3}(2\hat{i} + \hat{j} - 2\hat{k}) \)</label>
+              <label class="option-label"><input type="radio" name="q12" value="B"> \( \frac{1}{9}(2\hat{i} + \hat{j} - 2\hat{k}) \)</label>
+              <label class="option-label"><input type="radio" name="q12" value="C"> \( \frac{1}{\sqrt{5}}(2\hat{i} + \hat{j} - 2\hat{k}) \)</label>
+              <label class="option-label"><input type="radio" name="q12" value="D"> \( 2\hat{i} + \hat{j} - 2\hat{k} \)</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • একক ভেক্টরের মান সর্বদা <span class="highlight">1</span>।
+              • <span class="blue-heading">একক ভেক্টর নির্ণয়:</span> \( \hat{a} = \frac{\vec{A}}{|\vec{A}|} \)<br/>
+              • \( |\vec{A}| = \sqrt{2^2 + 1^2 + (-2)^2} = \sqrt{4 + 1 + 4} = \sqrt{9} = \mathbf{3} \)<br/>
+              • অতএব, একক ভেক্টর = <span class="highlight">\( \frac{1}{3}(2\hat{i} + \hat{j} - 2\hat{k}) \)</span>।
             </div>
           </div>
 
+          <!-- নতুন ১৩ নম্বর প্রশ্ন -->
           <div class="mcq-card" id="qCard-13">
-            <div class="question-title">১৩. নাল ভেক্টরের দিক কেমন হয়?</div>
+            <div class="question-title">১৩. প্রসঙ্গ কাঠামোর মূলবিন্দুর সাপেক্ষে কোনো বিন্দুর অবস্থান নির্দেশকারী ভেক্টরকে কী বলা হয়?</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q13" value="A"> পূর্বমুখী</label>
-              <label class="option-label"><input type="radio" name="q13" value="B"> অনির্দিষ্ট</label>
-              <label class="option-label"><input type="radio" name="q13" value="C"> উত্তরমুখী</label>
-              <label class="option-label"><input type="radio" name="q13" value="D"> লম্বালম্বি</label>
+              <label class="option-label"><input type="radio" name="q13" value="A"> সরণ ভেক্টর</label>
+              <label class="option-label"><input type="radio" name="q13" value="B"> ব্যাসার্ধ ভেক্টর</label>
+              <label class="option-label"><input type="radio" name="q13" value="C"> বিপরীত ভেক্টর</label>
+              <label class="option-label"><input type="radio" name="q13" value="D"> বিপ্রতীপ ভেক্টর</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • নাল ভেক্টরের দিক <span class="highlight">অনির্দিষ্ট</span> হয়।
+              • প্রসঙ্গ কাঠামোর মূলবিন্দুর সাপেক্ষে যেকোনো বিন্দুর অবস্থান যে ভেক্টরের সাহায্যে নির্দেশ করা হয়, তাকে <span class="highlight">অবস্থান ভেক্টর (Position Vector)</span> বা ব্যাসার্ধ ভেক্টর বলা হয়।
             </div>
           </div>
 
@@ -763,8 +786,8 @@
             <div class="options-grid">
               <label class="option-label"><input type="radio" name="q22" value="A"> 1</label>
               <label class="option-label"><input type="radio" name="q22" value="B"> 0</label>
-              <label class="option-label"><input type="radio" name="q22" value="C"> \hat{i}</label>
-              <label class="option-label"><input type="radio" name="q22" value="D"> -1</label>
+              <label class="option-label"><input type="radio" name="q22" value="C"> i</label>
+              <label class="option-label"><input type="radio" name="q22" value="D"> -i</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
@@ -801,7 +824,7 @@
           </div>
 
           <div class="mcq-card" id="qCard-25">
-            <div class="question-title">২৫. একটি ভেক্টরের পাদবিন্দু ও শীর্ষবিন্দু একই বিন্দুতে হলে তাকে কী বলে?</div>
+            <div class="question-title">২৫. কোন ভেক্টরের দিক নেই?</div>
             <div class="options-grid">
               <label class="option-label"><input type="radio" name="q25" value="A"> একক ভেক্টর</label>
               <label class="option-label"><input type="radio" name="q25" value="B"> নাল ভেক্টর</label>
@@ -810,7 +833,7 @@
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • পাদবিন্দু ও শীর্ষবিন্দু একই হলে তাকে <span class="highlight">নাল ভেক্টর</span> বলে।
+              • পাদবিন্দু ও শীর্ষবিন্দু একই হলে তাকে <span class="highlight">নাল ভেক্টর</span> বলে।এর কোনো দিক নেই।
             </div>
           </div>
 
@@ -860,8 +883,9 @@
       </div>
     </div>
 
+    <!-- গোল্ডেন ও ব্ল্যাক শেড ফুটার -->
     <div class="footer-notice">
-      বাণিজ্যিক ব্যবহার নিষিদ্ধ &nbsp;|&nbsp; Developed by Rimit
+      বাণিজ্যিক ব্যবহার নিষিদ্ধ &nbsp;|&nbsp; <span class="golden-text">Developed by Rimit</span>
     </div>
   </div>
 
