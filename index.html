@@ -69,7 +69,7 @@
       document.getElementById('customModal').style.display = 'none';
     };
 
-    // অটোমেটিক অ্যানোনিমাস লগইন
+    // সাইন-ইন ব্যাকগ্রাউন্ডে নীরবে সম্পন্ন হবে (পপ-আপ ছাড়াই)
     window.addEventListener('DOMContentLoaded', async () => {
       onAuthStateChanged(auth, async (user) => {
         if (user) {
@@ -81,16 +81,28 @@
             currentUser = cred.user;
             showScreen('profileSetupScreen');
           } catch (err) {
-            console.error("Auth Error:", err);
-            showModal("ফায়ারবেস ত্রুটি: অ্যানোনিমাস লগইন সক্রিয় আছে কিনা যাচাই করুন!");
+            console.error("Auth Error (Silent):", err);
+            // ব্যাকগ্রাউন্ড ট্রাই এররে ফাউল পপ-আপ দেখানো হবে না
+            showScreen('profileSetupScreen');
           }
         }
       });
+
+      // উত্তর সিলেক্ট করার ইভেন্ট লিসেনার
+      document.getElementById('quizForm').addEventListener('change', updateAnsweredCount);
     });
+
+    function updateAnsweredCount() {
+      let count = 0;
+      for (let i = 1; i <= 25; i++) {
+        const selected = document.querySelector(`input[name="q${i}"]:checked`);
+        if (selected) count++;
+      }
+      document.getElementById('answeredBadge').innerText = `উত্তর দেওয়া হয়েছে: ${count}/২৫`;
+    }
 
     async function checkExistingProfile(uid) {
       try {
-        // ফিক্সড পাথ: ৬ সেগমেন্ট (ডকুমেন্ট)
         const profileRef = doc(db, 'artifacts', appId, 'users', uid, 'data', 'profile');
         const profileSnap = await getDoc(profileRef);
 
@@ -108,7 +120,7 @@
           showScreen('profileSetupScreen');
         }
       } catch (e) {
-        console.error("Profile fetch error:", e);
+        console.error("Profile check error", e);
         showScreen('profileSetupScreen');
       }
     }
@@ -123,14 +135,13 @@
       }
 
       try {
-        // ফিক্সড পাথ: ৬ সেগমেন্ট (ডকুমেন্ট)
         const profileRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'data', 'profile');
         userProfile = { name, college };
         await setDoc(profileRef, userProfile);
         startExam();
       } catch (e) {
         console.error(e);
-        showModal("প্রোফাইল সংরক্ষণ করতে সমস্যা হয়েছে: " + e.message);
+        showModal("তথ্য সংরক্ষণ করতে সমস্যা হয়েছে: " + e.message);
       }
     };
 
@@ -139,6 +150,7 @@
       totalSeconds = examDuration;
       userAnswers = {};
       document.getElementById('quizForm').reset();
+      updateAnsweredCount();
       
       enableAntiCheat();
       showScreen('examArea');
@@ -153,7 +165,7 @@
           document.getElementById('warningText').innerText = `ট্যাব পরিবর্তন: ${warningCount}/২`;
           
           if (warningCount >= 3) {
-            showModal("⚠️ সতর্কতা! একাধিকবার ট্যাব পরিবর্তন করার কারণে আপনার পরীক্ষা স্বয়ংক্রিয়ভাবে জমা নেওয়া হলো!");
+            showModal("⚠️ সতর্কতা! একাধিকবার ট্যাব পরিবর্তন করায় পরীক্ষা স্বয়ংক্রিয়ভাবে জমা হয়েছে!");
             submitExam(true);
           } else {
             showModal(`⚠️ সতর্কবার্তা (${warningCount}/২): পরীক্ষা চলাকালীন ট্যাব পরিবর্তন করা নিষেধ!`);
@@ -167,7 +179,7 @@
       timerInterval = setInterval(() => {
         if (totalSeconds <= 0) {
           clearInterval(timerInterval);
-          showModal("সময় শেষ! আপনার খাতা স্বয়ংক্রিয়ভাবে জমা হচ্ছে।");
+          showModal("সময় শেষ! আপনার খাতা জমা দেওয়া হচ্ছে।");
           submitExam();
           return;
         }
@@ -198,11 +210,9 @@
 
       if (currentUser && userProfile) {
         try {
-          // প্রাইভেট পাথ
           const examRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'data', 'exam_status');
           await setDoc(examRef, { score: score, timestamp: serverTimestamp(), terminated: isTerminated });
 
-          // পাবলিক লিডারবোর্ড পাথ
           const lbRef = doc(db, 'artifacts', appId, 'public', 'data', 'leaderboard', currentUser.uid);
           await setDoc(lbRef, {
             uid: currentUser.uid,
@@ -243,13 +253,14 @@
     };
 
     function loadLeaderboard() {
-      // পাবলিক লিডারবোর্ড কালেকশন
       const lbRef = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
       
+      // ডাটাব্যাজ থেকে রিয়েলটাইমে সকলের তথ্য নিয়ে লিডারবোর্ড লোড করা
       onSnapshot(lbRef, (snapshot) => {
         let lbData = [];
         snapshot.forEach(doc => lbData.push(doc.data()));
         
+        // বেশি নম্বর থেকে কম নম্বর অনুযায়ী সর্টিং
         lbData.sort((a, b) => b.score - a.score);
 
         const tbody = document.getElementById('leaderboardBody');
@@ -258,7 +269,7 @@
         let myRank = '-';
 
         if(lbData.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 20px;">এখনো কেউ পরীক্ষা দেয়নি।</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 20px; color:#64748b;">এখনো কেউ পরীক্ষা দেয়নি। প্রথম পরীক্ষা দিয়ে লিডারবোর্ডের শীর্ষে আসো!</td></tr>';
             return;
         }
 
@@ -357,9 +368,10 @@
     .btn { padding: 12px 20px; font-size: 1rem; font-weight: 600; border-radius: 8px; cursor: pointer; border: none; width: 100%; margin-top: 10px; }
     .btn-primary { background: var(--blue-marker); color: white; }
 
-    .timer-bar { position: sticky; top: 0; background: #ffffff; border-bottom: 2px solid var(--blue-marker); padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; z-index: 90; }
-    .timer-box { font-size: 1.2rem; font-weight: 700; color: var(--badge-red); background: #fef2f2; padding: 4px 14px; border-radius: 20px; border: 1px solid #fca5a5; }
+    .timer-bar { position: sticky; top: 0; background: #ffffff; border-bottom: 2px solid var(--blue-marker); padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; z-index: 90; }
+    .timer-box { font-size: 1.15rem; font-weight: 700; color: var(--badge-red); background: #fef2f2; padding: 4px 12px; border-radius: 20px; border: 1px solid #fca5a5; }
     .warning-badge { font-size: 0.85rem; background: #fff7ed; color: #c2410c; padding: 4px 10px; border-radius: 6px; border: 1px solid #ffedd5; font-weight: 600; }
+    .answered-badge { font-size: 0.85rem; background: #eff6ff; color: #1d4ed8; padding: 4px 10px; border-radius: 6px; border: 1px solid #bfdbfe; font-weight: 700; }
 
     .notebook-paper { background-color: var(--paper-bg); background-image: linear-gradient(var(--line-color) 1px, transparent 1px); background-size: 100% 28px; padding: 25px 20px 25px 30px; position: relative; border-left: 3px solid var(--margin-line); }
 
@@ -371,7 +383,7 @@
     .option-label { display: flex; align-items: center; padding: 10px 12px; background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 8px; cursor: pointer; font-size: 0.95rem; }
     .option-label input { margin-right: 10px; accent-color: var(--blue-marker); transform: scale(1.1); }
 
-    /* উত্তর পর্যালোচনার কালার */
+    /* উত্তর করার কালার স্টাইল */
     .correct-option { background-color: #dcfce7 !important; border-color: #22c55e !important; color: #15803d; font-weight: bold; }
     .wrong-option { background-color: #fee2e2 !important; border-color: #ef4444 !important; color: #b91c1c; font-weight: bold; }
 
@@ -381,7 +393,7 @@
     .blue-heading { color: var(--blue-marker); font-weight: 700; }
     .trick-box { background: #faf5ff; border: 1px solid #e9d5ff; color: #6b21a8; padding: 4px 10px; border-radius: 6px; font-size: 0.85rem; font-family: 'Hind Siliguri', sans-serif; margin-top: 8px; display: inline-block; font-weight: 600; }
 
-    /* ফলাফল পেজের ডিজাইন */
+    /* ফলাফল স্ক্রিন ডিজাইন */
     .result-summary { background: linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%); border: 1px solid #bae6fd; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 20px; }
     .score-badge { font-size: 2.2rem; font-weight: 800; color: var(--blue-marker); }
 
@@ -406,7 +418,7 @@
 </head>
 <body>
 
-  <!-- মোডাল ডায়ালগ -->
+  <!-- অ্যালার্ট মোডাল -->
   <div class="modal-overlay" id="customModal">
     <div class="modal-content">
       <div style="font-size: 2rem; margin-bottom: 10px;">🔔</div>
@@ -441,7 +453,7 @@
     <!-- ২. পরীক্ষা নেওয়ার স্ক্রিন -->
     <div id="examArea" style="display: none; background: #f8fafc;">
       <div class="timer-bar">
-        <div style="font-weight:700; color:var(--blue-marker); font-size:1rem;">ভেক্টর লাইভ পরীক্ষা</div>
+        <div class="answered-badge" id="answeredBadge">উত্তর দেওয়া হয়েছে: 0/২৫</div>
         <div class="warning-badge" id="warningText">ট্যাব পরিবর্তন: 0/২</div>
         <div class="timer-box" id="timeDisplay">20:00</div>
       </div>
