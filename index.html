@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>HSC Physics - Vector MCQ Exam & Leaderboard</title>
+  <title>এইচএসসি পদার্থবিজ্ঞান - ভেক্টর এমসিকিউ পরীক্ষা ও লিডারবোর্ড</title>
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,7 +19,7 @@
     import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    // Your web app's Firebase configuration
+    // ওয়েব অ্যাপের ফায়ারবেস কনফিগারেশন
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
       apiKey: "AIzaSyCNW7psMpQaSDE957kA3AnQAFjGNFqHrCo",
       authDomain: "vector-7eda0.firebaseapp.com",
@@ -30,7 +30,7 @@
       measurementId: "G-RCLPV9PMJF"
     };
 
-    // Initialize Firebase
+    // ফায়ারবেস ইনিশিয়ালাইজেশন
     const app = initializeApp(firebaseConfig);
     const analytics = getAnalytics(app);
     const auth = getAuth(app);
@@ -69,7 +69,7 @@
       document.getElementById('customModal').style.display = 'none';
     };
 
-    // Auto Anonymous Login Setup
+    // অটোমেটিক অ্যানোনিমাস লগইন
     window.addEventListener('DOMContentLoaded', async () => {
       onAuthStateChanged(auth, async (user) => {
         if (user) {
@@ -82,7 +82,7 @@
             showScreen('profileSetupScreen');
           } catch (err) {
             console.error("Auth Error:", err);
-            showModal("Firebase Error: Anonymous Auth enable kora ache kina jachai korun!");
+            showModal("ফায়ারবেস ত্রুটি: অ্যানোনিমাস লগইন সক্রিয় আছে কিনা যাচাই করুন!");
           }
         }
       });
@@ -90,12 +90,13 @@
 
     async function checkExistingProfile(uid) {
       try {
-        const profileRef = doc(db, 'artifacts', appId, 'users', uid, 'profile');
+        // ফিক্সড পাথ: ৬ সেগমেন্ট (ডকুমেন্ট)
+        const profileRef = doc(db, 'artifacts', appId, 'users', uid, 'data', 'profile');
         const profileSnap = await getDoc(profileRef);
 
         if (profileSnap.exists()) {
           userProfile = profileSnap.data();
-          const examRef = doc(db, 'artifacts', appId, 'users', uid, 'exam_status');
+          const examRef = doc(db, 'artifacts', appId, 'users', uid, 'data', 'exam_status');
           const examSnap = await getDoc(examRef);
           
           if (examSnap.exists()) {
@@ -117,17 +118,19 @@
       const college = document.getElementById('collegeNameInput').value.trim();
 
       if (!name || !college) {
-        showModal("Anurogh kore apnar Nam o College pradon korun!");
+        showModal("অনুগ্রহ করে আপনার নাম ও কলেজের নাম প্রদান করুন!");
         return;
       }
 
       try {
-        const profileRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'profile');
+        // ফিক্সড পাথ: ৬ সেগমেন্ট (ডকুমেন্ট)
+        const profileRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'data', 'profile');
         userProfile = { name, college };
         await setDoc(profileRef, userProfile);
         startExam();
       } catch (e) {
-        showModal("Profile save korte shomossha hoyeche: " + e.message);
+        console.error(e);
+        showModal("প্রোফাইল সংরক্ষণ করতে সমস্যা হয়েছে: " + e.message);
       }
     };
 
@@ -147,13 +150,13 @@
       document.onvisibilitychange = () => {
         if (document.hidden && document.getElementById('examArea').style.display !== 'none') {
           warningCount++;
-          document.getElementById('warningText').innerText = `Tab Switches: ${warningCount}/2`;
+          document.getElementById('warningText').innerText = `ট্যাব পরিবর্তন: ${warningCount}/২`;
           
           if (warningCount >= 3) {
-            showModal("⚠️ Shotorkota! Ekkhadhikbar tab poribortoner karone exam submitted hoye gese!");
+            showModal("⚠️ সতর্কতা! একাধিকবার ট্যাব পরিবর্তন করার কারণে আপনার পরীক্ষা স্বয়ংক্রিয়ভাবে জমা নেওয়া হলো!");
             submitExam(true);
           } else {
-            showModal(`⚠️ Warning (${warningCount}/2): Exam chola kalin Tab Switch kora nishedh!`);
+            showModal(`⚠️ সতর্কবার্তা (${warningCount}/২): পরীক্ষা চলাকালীন ট্যাব পরিবর্তন করা নিষেধ!`);
           }
         }
       };
@@ -164,7 +167,7 @@
       timerInterval = setInterval(() => {
         if (totalSeconds <= 0) {
           clearInterval(timerInterval);
-          showModal("Somoy shesh! Khata shoyongkriyo bhabe joma hocche.");
+          showModal("সময় শেষ! আপনার খাতা স্বয়ংক্রিয়ভাবে জমা হচ্ছে।");
           submitExam();
           return;
         }
@@ -195,9 +198,11 @@
 
       if (currentUser && userProfile) {
         try {
-          const examRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'exam_status');
+          // প্রাইভেট পাথ
+          const examRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'data', 'exam_status');
           await setDoc(examRef, { score: score, timestamp: serverTimestamp(), terminated: isTerminated });
 
+          // পাবলিক লিডারবোর্ড পাথ
           const lbRef = doc(db, 'artifacts', appId, 'public', 'data', 'leaderboard', currentUser.uid);
           await setDoc(lbRef, {
             uid: currentUser.uid,
@@ -238,6 +243,7 @@
     };
 
     function loadLeaderboard() {
+      // পাবলিক লিডারবোর্ড কালেকশন
       const lbRef = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
       
       onSnapshot(lbRef, (snapshot) => {
@@ -252,7 +258,7 @@
         let myRank = '-';
 
         if(lbData.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 20px;">Ekhono keu exam dey ni.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 20px;">এখনো কেউ পরীক্ষা দেয়নি।</td></tr>';
             return;
         }
 
@@ -365,7 +371,7 @@
     .option-label { display: flex; align-items: center; padding: 10px 12px; background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 8px; cursor: pointer; font-size: 0.95rem; }
     .option-label input { margin-right: 10px; accent-color: var(--blue-marker); transform: scale(1.1); }
 
-    /* Review Colors */
+    /* উত্তর পর্যালোচনার কালার */
     .correct-option { background-color: #dcfce7 !important; border-color: #22c55e !important; color: #15803d; font-weight: bold; }
     .wrong-option { background-color: #fee2e2 !important; border-color: #ef4444 !important; color: #b91c1c; font-weight: bold; }
 
@@ -375,7 +381,7 @@
     .blue-heading { color: var(--blue-marker); font-weight: 700; }
     .trick-box { background: #faf5ff; border: 1px solid #e9d5ff; color: #6b21a8; padding: 4px 10px; border-radius: 6px; font-size: 0.85rem; font-family: 'Hind Siliguri', sans-serif; margin-top: 8px; display: inline-block; font-weight: 600; }
 
-    /* Result Dashboard Components */
+    /* ফলাফল পেজের ডিজাইন */
     .result-summary { background: linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%); border: 1px solid #bae6fd; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 20px; }
     .score-badge { font-size: 2.2rem; font-weight: 800; color: var(--blue-marker); }
 
@@ -400,43 +406,43 @@
 </head>
 <body>
 
-  <!-- Modal -->
+  <!-- মোডাল ডায়ালগ -->
   <div class="modal-overlay" id="customModal">
     <div class="modal-content">
       <div style="font-size: 2rem; margin-bottom: 10px;">🔔</div>
       <p id="modalMessage" style="margin-bottom: 20px; font-weight: 600; font-size: 0.95rem; color: #334155;"></p>
-      <button class="btn btn-primary" onclick="closeModal()">Bujhte Perechi</button>
+      <button class="btn btn-primary" onclick="closeModal()">ঠিক আছে</button>
     </div>
   </div>
 
   <div class="container">
     <div class="header-banner">
-      <h1>HSC Physics - Vector MCQ Exam</h1>
-      <p>25 Board Questions & Instant Ranking</p>
+      <h1>এইচএসসি পদার্থবিজ্ঞান - ভেক্টর এমসিকিউ পরীক্ষা</h1>
+      <p>২৫টি বোর্ডভিত্তিক প্রশ্ন ও তাৎক্ষণিক ফলাফল</p>
     </div>
 
-    <!-- 1. Profile Setup Screen -->
+    <!-- ১. নাম ও কলেজ ইনপুট স্ক্রিন -->
     <div id="profileSetupScreen" class="screen-section">
       <div class="card">
-        <h3 style="color: var(--blue-marker); margin-bottom: 8px;">Information</h3>
-        <p style="margin-bottom: 20px; color: #64748b; font-size: 0.85rem;">Real name and college den🫡</p>
+        <h3 style="color: var(--blue-marker); margin-bottom: 8px;">পরীক্ষার্থীর তথ্য</h3>
+        <p style="margin-bottom: 20px; color: #64748b; font-size: 0.85rem;">লিডারবোর্ডের জন্য আপনার সঠিক নাম ও কলেজের নাম দিন।</p>
         <div class="form-group">
-          <label>Name:</label>
-          <input type="text" id="studentNameInput" placeholder="Full Name" />
+          <label>পরীক্ষার্থীর নাম:</label>
+          <input type="text" id="studentNameInput" placeholder="পূর্ণ নাম লিখুন" />
         </div>
         <div class="form-group">
-          <label>College:</label>
-          <input type="text" id="collegeNameInput" placeholder="College Name" />
+          <label>কলেজের নাম:</label>
+          <input type="text" id="collegeNameInput" placeholder="কলেজের নাম লিখুন" />
         </div>
-        <button class="btn btn-primary" onclick="submitProfileAndStart()">Exam start 🚀</button>
+        <button class="btn btn-primary" onclick="submitProfileAndStart()">পরীক্ষা শুরু করুন 🚀</button>
       </div>
     </div>
 
-    <!-- 2. Exam Area Screen -->
+    <!-- ২. পরীক্ষা নেওয়ার স্ক্রিন -->
     <div id="examArea" style="display: none; background: #f8fafc;">
       <div class="timer-bar">
-        <div style="font-weight:700; color:var(--blue-marker); font-size:1rem;">Vector Live Exam</div>
-        <div class="warning-badge" id="warningText">Tab Switches: 0/2</div>
+        <div style="font-weight:700; color:var(--blue-marker); font-size:1rem;">ভেক্টর লাইভ পরীক্ষা</div>
+        <div class="warning-badge" id="warningText">ট্যাব পরিবর্তন: 0/২</div>
         <div class="timer-box" id="timeDisplay">20:00</div>
       </div>
 
@@ -469,7 +475,7 @@
               <h4>ব্যাখ্যা ও সমাধান:</h4>
               • <span class="blue-heading">বিশ্লেষণ:</span> \( P = Q = R \) হলে সামান্তরিকের সূত্রানুসারে \( \cos \alpha = -\frac{1}{2} \)<br/>
               • অতএব, <span class="highlight">\( \alpha = 120^\circ \)</span> ।
-              <span class="trick-box">🎯 Short Trick: সমান মানের দুই ভেক্টরের লব্ধি সমান হলে কোণ সবসময় ১২০°।</span>
+              <span class="trick-box">🎯 শর্টকাট টেকনিক: সমান মানের দুই ভেক্টরের লব্ধি সমান হলে কোণ সবসময় ১২০°।</span>
             </div>
           </div>
 
@@ -800,35 +806,35 @@
       </div>
 
       <div style="padding: 20px; text-align: center; background: #fff; border-top: 1px solid #e2e8f0;">
-        <button class="btn btn-primary" style="max-width: 300px; font-size: 1.1rem; border-radius: 30px; padding: 14px;" onclick="submitExam()">Submit Exam</button>
+        <button class="btn btn-primary" style="max-width: 300px; font-size: 1.1rem; border-radius: 30px; padding: 14px;" onclick="submitExam()">পরীক্ষা জমা দিন</button>
       </div>
     </div>
 
-    <!-- 3. Result & Tabbed Area Screen -->
+    <!-- ৩. ফলাফল ও রিভিউ স্ক্রিন -->
     <div id="resultArea" class="screen-section" style="display: none;">
       <div class="result-summary">
-        <h3 style="color: #0f172a; margin-bottom: 5px;">Exam Terminated & Result Saved!</h3>
-        <p style="color: #64748b; font-size: 0.9rem;">Apnar Prapto Number:</p>
-        <div class="score-badge"><span id="scoreDisplayVal">0</span> <span style="font-size: 1.2rem; color: #64748b;">/ 25</span></div>
-        <p style="font-size: 0.9rem; font-weight: 600; color: #0038a8; margin-top: 5px;">Your Position: <span id="userRankVal">-</span></p>
+        <h3 style="color: #0f172a; margin-bottom: 5px;">পরীক্ষা সম্পন্ন ও ফলাফল সংরক্ষিত হয়েছে!</h3>
+        <p style="color: #64748b; font-size: 0.9rem;">আপনার প্রাপ্ত নম্বর:</p>
+        <div class="score-badge"><span id="scoreDisplayVal">0</span> <span style="font-size: 1.2rem; color: #64748b;">/ ২৫</span></div>
+        <p style="font-size: 0.9rem; font-weight: 600; color: #0038a8; margin-top: 5px;">আপনার অবস্থান: <span id="userRankVal">-</span></p>
       </div>
 
-      <!-- Navigation Tabs -->
+      <!-- ন্যাভিগেশন ট্যাব -->
       <div class="nav-tabs">
-        <button id="tabLbBtn" class="tab-btn active" onclick="switchTab('leaderboard')">🏆 Leaderboard</button>
-        <button id="tabReviewBtn" class="tab-btn" onclick="switchTab('review')">📝 Review Answers</button>
+        <button id="tabLbBtn" class="tab-btn active" onclick="switchTab('leaderboard')">🏆 লিডারবোর্ড</button>
+        <button id="tabReviewBtn" class="tab-btn" onclick="switchTab('review')">📝 উত্তর পর্যালোচনা</button>
       </div>
 
-      <!-- Tab 1: Leaderboard -->
+      <!-- ট্যাব ১: লিডারবোর্ড -->
       <div id="leaderboardTabContent">
         <div class="lb-container">
           <table>
             <thead>
               <tr>
-                <th style="width: 70px; text-align: center;">Rank</th>
-                <th>Name</th>
-                <th>College</th>
-                <th style="text-align: center;">Score</th>
+                <th style="width: 70px; text-align: center;">র‍্যাংক</th>
+                <th>নাম</th>
+                <th>কলেজ</th>
+                <th style="text-align: center;">নম্বর</th>
               </tr>
             </thead>
             <tbody id="leaderboardBody">
@@ -837,14 +843,13 @@
         </div>
       </div>
 
-      <!-- Tab 2: Answer Review -->
+      <!-- ট্যাব ২: উত্তর পর্যালোচনা -->
       <div id="reviewTabContent" class="notebook-paper" style="display: none;">
-        <!-- Dynamically Populated in JavaScript -->
       </div>
     </div>
 
     <div class="footer-notice">
-       &nbsp;&nbsp; Developed by Rimit
+      বাণিজ্যিক ব্যবহার নিষিদ্ধ &nbsp;|&nbsp; Developed by Rimit
     </div>
   </div>
 
