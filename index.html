@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="bn">
 <head>
@@ -46,20 +45,6 @@
 
     const totalQuestions = 30;
 
-    const correctAnswers = {
-      q1: "C", q2: "D", q3: "B", q4: "C", q5: "B",
-      q6: "B", q7: "B", q8: "A", q9: "B", q10: "C",
-      q11: "B", q12: "B", q13: "B", q14: "A", q15: "B",
-      q16: "C", q17: "A", q18: "B", q19: "C", q20: "A",
-      q21: "B", q22: "A", q23: "B", q24: "A", q25: "C", // Q25 option C mapped
-      q26: "C", q27: "B", q28: "A", q29: "C", q30: "B"
-    };
-
-    // Map correct options explicitly
-    // q1: C, q2: D, q3: B, q4: C, q5: B, q6: B, q7: B, q8: A, q9: B, q10: C,
-    // q11: B, q12: B, q13: B, q14: A, q15: B, q16: C, q17: A, q18: B, q19: C, q20: A,
-    // q21: B, q22: A, q23: B, q24: A, q25: C, q26: C, q27: B, q28: A, q29: C, q30: B
-
     const answerKeys = {
       q1: "C", q2: "D", q3: "B", q4: "C", q5: "B",
       q6: "B", q7: "B", q8: "A", q9: "B", q10: "C",
@@ -85,11 +70,22 @@
       document.getElementById('customModal').style.display = 'none';
     };
 
+    // ইন্টারনেট থেকে প্রকৃত সঠিক সময় নেওয়া
+    async function getRealServerTime() {
+      try {
+        const res = await fetch('https://worldtimeapi.org/api/timezone/Asia/Dhaka');
+        const data = await res.json();
+        return new Date(data.datetime).getTime();
+      } catch (e) {
+        return Date.now();
+      }
+    }
+
     window.addEventListener('DOMContentLoaded', async () => {
       onAuthStateChanged(auth, async (user) => {
         if (user) {
           currentUser = user;
-          checkExistingProfile(user.uid);
+          await checkExistingProfile(user.uid);
         } else {
           try {
             const cred = await signInAnonymously(auth);
@@ -141,7 +137,12 @@
           if (examSnap.exists() && examSnap.data().score !== undefined) {
             showResultPage(examSnap.data().score);
           } else {
-            startExam();
+            const valid = await isExamTimeValid();
+            if (valid) {
+              await startExam();
+            } else {
+              showScreen('profileSetupScreen');
+            }
           }
         } else {
           showScreen('profileSetupScreen');
@@ -152,13 +153,13 @@
       }
     }
 
-    // ২৮ আগস্ট রাত ১০:০০ টা (বাংলাদেশ সময়) - পরীক্ষা শুরু
+    // ২৮ আগস্ট ২০২৬ রাত ১০:০০ টা (বাংলাদেশ সময়)
     const examStartTime = new Date("2026-08-28T22:00:00+06:00").getTime();
-    // ২৮ আগস্ট রাত ১১:০০ টা (বাংলাদেশ সময়) - পরীক্ষা শেষ
+    // ২৮ আগস্ট ২০২৬ রাত ১১:০০ টা (বাংলাদেশ সময়)
     const examEndTime = new Date("2026-08-28T23:00:00+06:00").getTime();
 
-    function isExamTimeValid() {
-      const now = Date.now();
+    async function isExamTimeValid() {
+      const now = await getRealServerTime();
       if (now < examStartTime) {
         showModal("পরীক্ষা ২৮ আগস্ট রাত ১০:০০ টায় শুরু হবে। অনুগ্রহ করে অপেক্ষা করুন!");
         return false;
@@ -171,7 +172,9 @@
     }
 
     window.submitProfileAndStart = async function() {
-      if (!isExamTimeValid()) return;
+      const valid = await isExamTimeValid();
+      if (!valid) return;
+
       const name = document.getElementById('studentNameInput').value.trim();
       const college = document.getElementById('collegeNameInput').value.trim();
 
@@ -184,7 +187,7 @@
         const profileRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'data', 'profile');
         userProfile = { name, college };
         await setDoc(profileRef, userProfile);
-        startExam();
+        await startExam();
       } catch (e) {
         console.error(e);
         showModal("তথ্য সংরক্ষণ করতে সমস্যা হয়েছে: " + e.message);
@@ -198,11 +201,12 @@
       const examRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'data', 'exam_status');
       const examSnap = await getDoc(examRef);
 
+      const nowTime = await getRealServerTime();
       let startTime;
       if (examSnap.exists() && examSnap.data().startTime) {
         startTime = examSnap.data().startTime.toDate().getTime();
       } else {
-        startTime = Date.now();
+        startTime = nowTime;
         await setDoc(examRef, { startTime: serverTimestamp() }, { merge: true });
       }
 
@@ -217,7 +221,7 @@
         }
       }
 
-      const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+      const elapsedTime = Math.floor((nowTime - startTime) / 1000);
       totalSeconds = examDuration - elapsedTime;
 
       if (totalSeconds <= 0) {
@@ -310,17 +314,18 @@
       document.onvisibilitychange = null;
 
       let score = 0;
-      userAnswers = {};
+      let currentAnswers = {};
 
       for (let i = 1; i <= totalQuestions; i++) {
         const qKey = 'q' + i;
         const selected = document.querySelector(`input[name="${qKey}"]:checked`);
-        userAnswers[qKey] = selected ? selected.value : null;
+        currentAnswers[qKey] = selected ? selected.value : null;
 
         if (selected && selected.value === answerKeys[qKey]) {
           score++;
         }
       }
+      userAnswers = currentAnswers;
 
       if (currentUser && userProfile) {
         try {
@@ -953,7 +958,7 @@
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(খ) \(\alpha = \cos^{-1}(-v/u)\)</span>। সোজা অপর পাড়ে পৌঁছাতে  লব্ধি বেগ নদী পারাপারের খাড়া বরাবর হতে হয়, তাই \(\cos\alpha = -v/u \implies \alpha = \cos^{-1}(-v/u)\)।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(খ) \(\alpha = \cos^{-1}(-v/u)\)</span>। সোজা অপর পাড়ে পৌঁছাতে লব্ধি বেগ নদী পারাপারের খাড়া বরাবর হতে হয়, তাই \(\cos\alpha = -v/u \implies \alpha = \cos^{-1}(-v/u)\)।
             </div>
           </div>
 
