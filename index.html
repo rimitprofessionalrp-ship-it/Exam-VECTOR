@@ -10,7 +10,6 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
   
-  
   <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 
   <script type="module">
@@ -35,22 +34,39 @@
     const analytics = getAnalytics(app);
     const auth = getAuth(app);
     const db = getFirestore(app);
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'vector-exam-v5';
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'physics-vector-mcq-v1';
 
     let currentUser = null;
     let userProfile = null;
     let warningCount = 0;
-    const examDuration = 20 * 60;
+    const examDuration = 25 * 60; // ২৫ মিনিট (সেকেন্ডে)
     let totalSeconds = examDuration;
     let timerInterval = null;
     let userAnswers = {};
 
+    const totalQuestions = 30;
+
     const correctAnswers = {
-      q1: "C", q2: "B", q3: "C", q4: "B", q5: "B",
-      q6: "C", q7: "B", q8: "B", q9: "A", q10: "B",
-      q11: "B", q12: "A", q13: "B", q14: "C", q15: "B",
-      q16: "A", q17: "B", q18: "B", q19: "B", q20: "C",
-      q21: "B", q22: "B", q23: "C", q24: "B", q25: "B"
+      q1: "C", q2: "D", q3: "B", q4: "C", q5: "B",
+      q6: "B", q7: "B", q8: "A", q9: "B", q10: "C",
+      q11: "B", q12: "B", q13: "B", q14: "A", q15: "B",
+      q16: "C", q17: "A", q18: "B", q19: "C", q20: "A",
+      q21: "B", q22: "A", q23: "B", q24: "A", q25: "C", // Q25 option C mapped
+      q26: "C", q27: "B", q28: "A", q29: "C", q30: "B"
+    };
+
+    // Map correct options explicitly
+    // q1: C, q2: D, q3: B, q4: C, q5: B, q6: B, q7: B, q8: A, q9: B, q10: C,
+    // q11: B, q12: B, q13: B, q14: A, q15: B, q16: C, q17: A, q18: B, q19: C, q20: A,
+    // q21: B, q22: A, q23: B, q24: A, q25: C, q26: C, q27: B, q28: A, q29: C, q30: B
+
+    const answerKeys = {
+      q1: "C", q2: "D", q3: "B", q4: "C", q5: "B",
+      q6: "B", q7: "B", q8: "A", q9: "B", q10: "C",
+      q11: "B", q12: "B", q13: "B", q14: "A", q15: "B",
+      q16: "C", q17: "A", q18: "B", q19: "C", q20: "A",
+      q21: "B", q22: "A", q23: "B", q24: "A", q25: "C",
+      q26: "C", q27: "B", q28: "A", q29: "C", q30: "B"
     };
 
     function showScreen(screenId) {
@@ -69,7 +85,6 @@
       document.getElementById('customModal').style.display = 'none';
     };
 
-    // সাইন-ইন ব্যাকগ্রাউন্ডে নীরবে সম্পন্ন হবে (পপ-আপ ছাড়াই)
     window.addEventListener('DOMContentLoaded', async () => {
       onAuthStateChanged(auth, async (user) => {
         if (user) {
@@ -87,17 +102,30 @@
         }
       });
 
-      // উত্তর সিলেক্ট করার ইভেন্ট লিসেনার
-      document.getElementById('quizForm').addEventListener('change', updateAnsweredCount);
+      document.getElementById('quizForm').addEventListener('change', updateAnsweredCountAndSaveDraft);
     });
 
-    function updateAnsweredCount() {
+    async function updateAnsweredCountAndSaveDraft() {
       let count = 0;
-      for (let i = 1; i <= 25; i++) {
+      userAnswers = {};
+
+      for (let i = 1; i <= totalQuestions; i++) {
         const selected = document.querySelector(`input[name="q${i}"]:checked`);
-        if (selected) count++;
+        if (selected) {
+          count++;
+          userAnswers['q' + i] = selected.value;
+        }
       }
-      document.getElementById('answeredBadge').innerText = `উত্তর দেওয়া হয়েছে: ${count}/২৫`;
+      document.getElementById('answeredBadge').innerText = `উত্তর দেওয়া হয়েছে: ${count}/${totalQuestions}`;
+
+      if (currentUser) {
+        try {
+          const draftRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'data', 'draft_answers');
+          await setDoc(draftRef, { answers: userAnswers }, { merge: true });
+        } catch (e) {
+          console.error("Draft save error", e);
+        }
+      }
     }
 
     async function checkExistingProfile(uid) {
@@ -110,7 +138,7 @@
           const examRef = doc(db, 'artifacts', appId, 'users', uid, 'data', 'exam_status');
           const examSnap = await getDoc(examRef);
           
-          if (examSnap.exists()) {
+          if (examSnap.exists() && examSnap.data().score !== undefined) {
             showResultPage(examSnap.data().score);
           } else {
             startExam();
@@ -124,7 +152,26 @@
       }
     }
 
+    // ২৮ আগস্ট রাত ১০:০০ টা (বাংলাদেশ সময়) - পরীক্ষা শুরু
+    const examStartTime = new Date("2026-08-28T22:00:00+06:00").getTime();
+    // ২৮ আগস্ট রাত ১১:০০ টা (বাংলাদেশ সময়) - পরীক্ষা শেষ
+    const examEndTime = new Date("2026-08-28T23:00:00+06:00").getTime();
+
+    function isExamTimeValid() {
+      const now = Date.now();
+      if (now < examStartTime) {
+        showModal("পরীক্ষা ২৮ আগস্ট রাত ১০:০০ টায় শুরু হবে। অনুগ্রহ করে অপেক্ষা করুন!");
+        return false;
+      }
+      if (now > examEndTime) {
+        showModal("পরীক্ষার সময় শেষ হয়ে গেছে! পরীক্ষা ২৮ আগস্ট রাত ১১:০০ টা পর্যন্ত ছিল।");
+        return false;
+      }
+      return true;
+    }
+
     window.submitProfileAndStart = async function() {
+      if (!isExamTimeValid()) return;
       const name = document.getElementById('studentNameInput').value.trim();
       const college = document.getElementById('collegeNameInput').value.trim();
 
@@ -144,13 +191,46 @@
       }
     };
 
-    function startExam() {
+    async function startExam() {
       warningCount = 0;
-      totalSeconds = examDuration;
       userAnswers = {};
-      document.getElementById('quizForm').reset();
-      updateAnsweredCount();
-      
+
+      const examRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'data', 'exam_status');
+      const examSnap = await getDoc(examRef);
+
+      let startTime;
+      if (examSnap.exists() && examSnap.data().startTime) {
+        startTime = examSnap.data().startTime.toDate().getTime();
+      } else {
+        startTime = Date.now();
+        await setDoc(examRef, { startTime: serverTimestamp() }, { merge: true });
+      }
+
+      const draftRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'data', 'draft_answers');
+      const draftSnap = await getDoc(draftRef);
+      if (draftSnap.exists()) {
+        userAnswers = draftSnap.data().answers || {};
+        for (let key in userAnswers) {
+          const val = userAnswers[key];
+          const input = document.querySelector(`input[name="${key}"][value="${val}"]`);
+          if (input) input.checked = true;
+        }
+      }
+
+      const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+      totalSeconds = examDuration - elapsedTime;
+
+      if (totalSeconds <= 0) {
+        await autoSubmitFromDraft();
+        return;
+      }
+
+      let count = 0;
+      for (let i = 1; i <= totalQuestions; i++) {
+        if (document.querySelector(`input[name="q${i}"]:checked`)) count++;
+      }
+      document.getElementById('answeredBadge').innerText = `উত্তর দেওয়া হয়েছে: ${count}/${totalQuestions}`;
+
       enableAntiCheat();
       showScreen('examArea');
       if (window.MathJax) MathJax.typesetPromise();
@@ -190,6 +270,41 @@
       }, 1000);
     }
 
+    async function autoSubmitFromDraft() {
+      try {
+        const draftRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'data', 'draft_answers');
+        const draftSnap = await getDoc(draftRef);
+        
+        if (draftSnap.exists()) {
+          userAnswers = draftSnap.data().answers || {};
+        }
+
+        let score = 0;
+        for (let i = 1; i <= totalQuestions; i++) {
+          const qKey = 'q' + i;
+          if (userAnswers[qKey] === answerKeys[qKey]) {
+            score++;
+          }
+        }
+
+        const examRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'data', 'exam_status');
+        await setDoc(examRef, { score: score, timestamp: serverTimestamp(), autoSubmitted: true }, { merge: true });
+
+        const lbRef = doc(db, 'artifacts', appId, 'public', 'data', 'leaderboard', currentUser.uid);
+        await setDoc(lbRef, {
+          uid: currentUser.uid,
+          name: userProfile ? userProfile.name : "পরীক্ষার্থী",
+          college: userProfile ? userProfile.college : "অজানা",
+          score: score,
+          timestamp: serverTimestamp()
+        });
+
+        showResultPage(score);
+      } catch (e) {
+        console.error("Auto Submit Error:", e);
+      }
+    }
+
     window.submitExam = async function(isTerminated = false) {
       if (timerInterval) clearInterval(timerInterval);
       document.onvisibilitychange = null;
@@ -197,12 +312,12 @@
       let score = 0;
       userAnswers = {};
 
-      for (let i = 1; i <= 25; i++) {
+      for (let i = 1; i <= totalQuestions; i++) {
         const qKey = 'q' + i;
         const selected = document.querySelector(`input[name="${qKey}"]:checked`);
         userAnswers[qKey] = selected ? selected.value : null;
 
-        if (selected && selected.value === correctAnswers[qKey]) {
+        if (selected && selected.value === answerKeys[qKey]) {
           score++;
         }
       }
@@ -210,7 +325,7 @@
       if (currentUser && userProfile) {
         try {
           const examRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'data', 'exam_status');
-          await setDoc(examRef, { score: score, timestamp: serverTimestamp(), terminated: isTerminated });
+          await setDoc(examRef, { score: score, timestamp: serverTimestamp(), terminated: isTerminated }, { merge: true });
 
           const lbRef = doc(db, 'artifacts', appId, 'public', 'data', 'leaderboard', currentUser.uid);
           await setDoc(lbRef, {
@@ -254,12 +369,10 @@
     function loadLeaderboard() {
       const lbRef = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
       
-      // ডাটাব্যাজ থেকে রিয়েলটাইমে সকলের তথ্য নিয়ে লিডারবোর্ড লোড করা
       onSnapshot(lbRef, (snapshot) => {
         let lbData = [];
         snapshot.forEach(doc => lbData.push(doc.data()));
         
-        // বেশি নম্বর থেকে কম নম্বর অনুযায়ী সর্টিং
         lbData.sort((a, b) => b.score - a.score);
 
         const tbody = document.getElementById('leaderboardBody');
@@ -302,7 +415,7 @@
       const reviewContainer = document.getElementById('reviewTabContent');
       reviewContainer.innerHTML = '';
 
-      for (let i = 1; i <= 25; i++) {
+      for (let i = 1; i <= totalQuestions; i++) {
         const qKey = 'q' + i;
         const origCard = document.getElementById(`qCard-${i}`);
         
@@ -310,7 +423,7 @@
 
         const cloneCard = origCard.cloneNode(true);
         const userAns = userAnswers[qKey];
-        const correctAns = correctAnswers[qKey];
+        const correctAns = answerKeys[qKey];
 
         const options = cloneCard.querySelectorAll('input[type="radio"]');
         options.forEach(input => {
@@ -333,6 +446,7 @@
 
         reviewContainer.appendChild(cloneCard);
       }
+      if (window.MathJax) MathJax.typesetPromise();
     }
   </script>
 
@@ -358,7 +472,20 @@
     .header-banner p { font-size: 0.9rem; color: #cbd5e1; }
 
     .screen-section { padding: 30px 20px; }
-    .card { max-width: 420px; margin: 20px auto; border: 1px solid #cbd5e1; border-radius: 12px; padding: 25px; background: #ffffff; box-shadow: 0 10px 25px rgba(0,0,0,0.05); text-align: center; }
+    .card { max-width: 450px; margin: 20px auto; border: 1px solid #cbd5e1; border-radius: 12px; padding: 25px; background: #ffffff; box-shadow: 0 10px 25px rgba(0,0,0,0.05); text-align: center; }
+    
+    .schedule-box {
+      background: #f0f9ff;
+      border: 1px dashed #0284c7;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 20px;
+      text-align: left;
+      font-size: 0.88rem;
+      color: #0369a1;
+    }
+    .schedule-box div { font-weight: 600; margin-bottom: 4px; color: #0c4a6e; }
+
     .form-group { margin-bottom: 16px; text-align: left; }
     .form-group label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 0.9rem; color: #334155; }
     .form-group input { width: 100%; padding: 12px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 0.95rem; outline: none; }
@@ -382,7 +509,6 @@
     .option-label { display: flex; align-items: center; padding: 10px 12px; background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 8px; cursor: pointer; font-size: 0.95rem; }
     .option-label input { margin-right: 10px; accent-color: var(--blue-marker); transform: scale(1.1); }
 
-    /* উত্তর করার কালার স্টাইল */
     .correct-option { background-color: #dcfce7 !important; border-color: #22c55e !important; color: #15803d; font-weight: bold; }
     .wrong-option { background-color: #fee2e2 !important; border-color: #ef4444 !important; color: #b91c1c; font-weight: bold; }
 
@@ -390,9 +516,7 @@
     .solution-notes h4 { font-family: 'Hind Siliguri', sans-serif; color: var(--blue-marker); font-size: 0.95rem; margin-bottom: 4px;}
     .highlight { background-color: var(--highlight-yellow); padding: 0 4px; border-radius: 3px; color: #000; font-weight: 600; }
     .blue-heading { color: var(--blue-marker); font-weight: 700; }
-    .trick-box { background: #faf5ff; border: 1px solid #e9d5ff; color: #6b21a8; padding: 4px 10px; border-radius: 6px; font-size: 0.85rem; font-family: 'Hind Siliguri', sans-serif; margin-top: 8px; display: inline-block; font-weight: 600; }
 
-    /* ফলাফল স্ক্রিন ডিজাইন */
     .result-summary { background: linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%); border: 1px solid #bae6fd; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 20px; }
     .score-badge { font-size: 2.2rem; font-weight: 800; color: var(--blue-marker); }
 
@@ -409,7 +533,6 @@
     .lb-score { color: var(--blue-marker); font-weight: 700; font-size: 1.1rem; text-align: center;}
     .rank-badge { display: inline-block; background: #e2e8f0; padding: 2px 8px; border-radius: 12px; font-weight: bold; font-size: 0.85rem; }
 
-    /* গোল্ডেন ও ব্ল্যাক শেড ফুটার স্টাইল */
     .footer-notice { 
       text-align: center; 
       padding: 16px 20px; 
@@ -448,15 +571,24 @@
 
   <div class="container">
     <div class="header-banner">
-      <h1>এইচএসসি পদার্থবিজ্ঞান - ভেক্টর এমসিকিউ পরীক্ষা</h1>
-      <p>২৫টি বোর্ডভিত্তিক প্রশ্ন ও তাৎক্ষণিক ফলাফল</p>
+      <h1>⚡ এইচএসসি পদার্থবিজ্ঞান ১ম পত্র - ভেক্টর (অধ্যায় ২) এমসিকিউ পরীক্ষা</h1>
+      <p>৩০টি গুরুত্বপূর্ণ এমসিকিউ পরীক্ষা (২৫ মিনিট) ও লাইভ লিডারবোর্ড</p>
     </div>
 
     <!-- ১. নাম ও কলেজ ইনপুট স্ক্রিন -->
     <div id="profileSetupScreen" class="screen-section">
       <div class="card">
         <h3 style="color: var(--blue-marker); margin-bottom: 8px;">পরীক্ষার্থীর তথ্য</h3>
-        <p style="margin-bottom: 20px; color: #64748b; font-size: 0.85rem;">লিডারবোর্ডের জন্য আপনার সঠিক নাম ও কলেজের নাম দিন।</p>
+        <p style="margin-bottom: 15px; color: #64748b; font-size: 0.85rem;">লিডারবোর্ডের জন্য আপনার সঠিক নাম ও কলেজের নাম দিন।</p>
+        
+        <!-- পরীক্ষা শুরু ও শেষ সময়সূচি -->
+        <div class="schedule-box">
+          <div>📅 পরীক্ষার সময়সূচি:</div>
+          • <strong>পরীক্ষা শুরু:</strong> ২৮ আগস্ট ২০২৬, রাত ১০:০০ টা<br>
+          • <strong>পরীক্ষা শেষ:</strong> ২৮ আগস্ট ২০২৬, রাত ১১:০০ টা<br>
+          • <strong>সময়সীমা:</strong> ২৫ মিনিট (৩০টি প্রশ্ন)
+        </div>
+
         <div class="form-group">
           <label>পরীক্ষার্থীর নাম:</label>
           <input type="text" id="studentNameInput" placeholder="পূর্ণ নাম লিখুন" />
@@ -472,368 +604,461 @@
     <!-- ২. পরীক্ষা নেওয়ার স্ক্রিন -->
     <div id="examArea" style="display: none; background: #f8fafc;">
       <div class="timer-bar">
-        <div class="answered-badge" id="answeredBadge">উত্তর দেওয়া হয়েছে: 0/২৫</div>
+        <div class="answered-badge" id="answeredBadge">উত্তর দেওয়া হয়েছে: 0/৩০</div>
         <div class="warning-badge" id="warningText">ট্যাব পরিবর্তন: 0/২</div>
-        <div class="timer-box" id="timeDisplay">20:00</div>
+        <div class="timer-box" id="timeDisplay">25:00</div>
       </div>
 
       <div class="notebook-paper">
         <form id="quizForm">
           
+          <!-- প্রশ্ন ১ -->
           <div class="mcq-card" id="qCard-1">
-            <div class="question-title">১. নিচের কোনটি ভেক্টর রাশি নয়?</div>
+            <div class="question-title">০১. \(\vec{A} = 2\hat{i} + 3\hat{j} - \hat{k}\) এবং \(\vec{B} = -\hat{i} + 2\hat{j} + 4\hat{k}\) ভেক্টরদ্বয়ের লব্ধি ভেক্টরের মান কত?</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q1" value="A"> বেগ</label>
-              <label class="option-label"><input type="radio" name="q1" value="B"> ত্বরণ</label>
-              <label class="option-label"><input type="radio" name="q1" value="C"> কাজ</label>
-              <label class="option-label"><input type="radio" name="q1" value="D"> বল</label>
+              <label class="option-label"><input type="radio" name="q1" value="A"> (ক) \(\sqrt{14}\)</label>
+              <label class="option-label"><input type="radio" name="q1" value="B"> (খ) \(\sqrt{19}\)</label>
+              <label class="option-label"><input type="radio" name="q1" value="C"> (গ) \(\sqrt{35}\)</label>
+              <label class="option-label"><input type="radio" name="q1" value="D"> (ঘ) \(5\)</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • <span class="blue-heading">কাজ (Work):</span> কাজের মান ও দিক উভয়ই থাকার কথা মনে হলেও এটি স্কেলার রাশি, কারণ দুটি ভেক্টর রাশির ডট গুণফল সর্বদা <span class="highlight">স্কেলার রাশি</span> হয় (\( W = \vec{F} \cdot \vec{s} \))।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(গ) \(\sqrt{35}\)</span>। লব্ধি ভেক্টর \(\vec{C} = \vec{A} + \vec{B} = (2-1)\hat{i} + (3+2)\hat{j} + (-1+4)\hat{k} = \hat{i} + 5\hat{j} + 3\hat{k}\)। এর মান \(|\vec{C}| = \sqrt{1^2 + 5^2 + 3^2} = \sqrt{1 + 25 + 9} = \sqrt{35}\)।
             </div>
           </div>
 
+          <!-- প্রশ্ন ২ -->
           <div class="mcq-card" id="qCard-2">
-            <div class="question-title">২. দুটি সমমানের ভেক্টরের লব্ধির মান তাদের যেকোনো একটির মানের সমান হলে ভেক্টরদ্বয়ের মধ্যবর্তী কোণ কত?</div>
+            <div class="question-title">০২. দুটি সমান মানের ভেক্টর একটি বিন্দুতে কত কোণে ক্রিয়া করলে এদের লব্ধির মান যেকোনো একটি ভেক্টরের মানের সমান হবে?</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q2" value="A"> \( 60^\circ \)</label>
-              <label class="option-label"><input type="radio" name="q2" value="B"> \( 120^\circ \)</label>
-              <label class="option-label"><input type="radio" name="q2" value="C"> \( 90^\circ \)</label>
-              <label class="option-label"><input type="radio" name="q2" value="D"> \( 180^\circ \)</label>
+              <label class="option-label"><input type="radio" name="q2" value="A"> (ক) \(0^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q2" value="B"> (খ) \(60^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q2" value="C"> (গ) \(90^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q2" value="D"> (ঘ) \(120^\circ\)</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • <span class="blue-heading">বিশ্লেষণ:</span> \( P = Q = R \) হলে সামান্তরিকের সূত্রানুসারে \( \cos \alpha = -\frac{1}{2} \)<br/>
-              • অতএব, <span class="highlight">\( \alpha = 120^\circ \)</span> ।
-              <span class="trick-box">🎯 শর্টকাট টেকনিক: সমান মানের দুই ভেক্টরের লব্ধি সমান হলে কোণ সবসময় ১২০°।</span>
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(ঘ) \(120^\circ\)</span>। \(R^2 = P^2 + Q^2 + 2PQ\cos\alpha\)। শর্তানুসারে \(P = Q = R\) হলে, \(P^2 = 2P^2 + 2P^2\cos\alpha \implies \cos\alpha = -1/2 \implies \alpha = 120^\circ\)।
             </div>
           </div>
 
+          <!-- প্রশ্ন ৩ -->
           <div class="mcq-card" id="qCard-3">
-            <div class="question-title">৩. \( \vec{A} = 3\hat{i} - 4\hat{j} \) ভেক্টরটির মান কত?</div>
+            <div class="question-title">০৩. \(\vec{A} = 3\hat{i} + 4\hat{j}\) ভেক্টরের X-অক্ষের সাথে উৎপন্ন কোণ কত?</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q3" value="A"> 3 একক</label>
-              <label class="option-label"><input type="radio" name="q3" value="B"> 4 একক</label>
-              <label class="option-label"><input type="radio" name="q3" value="C"> 5 একক</label>
-              <label class="option-label"><input type="radio" name="q3" value="D"> 7 একক</label>
+              <label class="option-label"><input type="radio" name="q3" value="A"> (ক) \(36.87^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q3" value="B"> (খ) \(53.13^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q3" value="C"> (গ) \(45^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q3" value="D"> (ঘ) \(60^\circ\)</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • মান নির্ণয়: \( |\vec{A}| = \sqrt{3^2 + (-4)^2} = \mathbf{5} \) একক।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(খ) \(53.13^\circ\)</span>। \(\tan\theta = \frac{A_y}{A_x} = \frac{4}{3} \implies \theta = \tan^{-1}(1.33) \approx 53.13^\circ\)।
             </div>
           </div>
 
+          <!-- প্রশ্ন ৪ -->
           <div class="mcq-card" id="qCard-4">
-            <div class="question-title">৪. দুটি ভেক্টরের ডট গুণফল শূন্য হলে ভেক্টরদ্বয় কীরূপে থাকে?</div>
+            <div class="question-title">০৪. দুটি ভেক্টরের ডট গুণন (Scalar product) শূন্য হলে ভেক্টরদ্বয়ের মধ্যবর্তী কোণ কত?</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q4" value="A"> সমান্তরাল</label>
-              <label class="option-label"><input type="radio" name="q4" value="B"> পরস্পর লম্ব</label>
-              <label class="option-label"><input type="radio" name="q4" value="C"> বিপরীতমুখী</label>
-              <label class="option-label"><input type="radio" name="q4" value="D"> একই দিকে</label>
+              <label class="option-label"><input type="radio" name="q4" value="A"> (ক) \(0^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q4" value="B"> (খ) \(45^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q4" value="C"> (গ) \(90^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q4" value="D"> (ঘ) \(180^\circ\)</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • ডট গুণফল শূন্য (\( \vec{A} \cdot \vec{B} = 0 \)) মানে \( AB \cos 90^\circ = 0 \), অর্থাৎ ভেক্টরদ্বয় <span class="highlight">পরস্পর লম্ব</span>।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(গ) \(90^\circ\)</span>। \(\vec{A} \cdot \vec{B} = AB\cos\theta = 0 \implies \cos\theta = 0 \implies \theta = 90^\circ\)। অর্থাৎ ভেক্টর দুটি পরস্পর লম্ব।
             </div>
           </div>
 
+          <!-- প্রশ্ন ৫ -->
           <div class="mcq-card" id="qCard-5">
-            <div class="question-title">৫. দুটি ভেক্টরের ক্রস গুণফল শূন্য হলে ভেক্টরদ্বয় কীরূপে থাকে?</div>
+            <div class="question-title">০৫. \(\vec{A} \times \vec{B} = 0\) হলে ভেক্টরদ্বয়—</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q5" value="A"> লম্ব</label>
-              <label class="option-label"><input type="radio" name="q5" value="B"> সমান্তরাল</label>
-              <label class="option-label"><input type="radio" name="q5" value="C"> সমকোণে</label>
-              <label class="option-label"><input type="radio" name="q5" value="D"> বিপরীতমুখী</label>
+              <label class="option-label"><input type="radio" name="q5" value="A"> (ক) পরস্পর লম্ব</label>
+              <label class="option-label"><input type="radio" name="q5" value="B"> (খ) সমান্তরাল</label>
+              <label class="option-label"><input type="radio" name="q5" value="C"> (গ) বিপরীতমুখী</label>
+              <label class="option-label"><input type="radio" name="q5" value="D"> (ঘ) কোনটিই নয়</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • ক্রস গুণফল শূন্য (\( \vec{A} \times \vec{B} = 0 \)) মানে \( AB \sin 0^\circ = 0 \), অর্থাৎ ভেক্টরদ্বয় <span class="highlight">সমান্তরাল</span>।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(খ) সমান্তরাল</span>। \(|\vec{A} \times \vec{B}| = AB\sin\theta = 0 \implies \sin\theta = 0 \implies \theta = 0^\circ\) বা \(180^\circ\), অর্থাৎ ভেক্টর দুটি সমান্তরাল।
             </div>
           </div>
 
+          <!-- প্রশ্ন ৬ -->
           <div class="mcq-card" id="qCard-6">
-            <div class="question-title">৬. \( \hat{i} \times \hat{j} \) এর মান কত?</div>
+            <div class="question-title">০৬. \(\hat{i} \cdot (\hat{j} \times \hat{k})\) এর মান কত?</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q6" value="A"> 0</label>
-              <label class="option-label"><input type="radio" name="q6" value="B"> -1</label>
-              <label class="option-label"><input type="radio" name="q6" value="C"> \( \hat{k} \)</label>
-              <label class="option-label"><input type="radio" name="q6" value="D"> \( -\hat{k} \)</label>
+              <label class="option-label"><input type="radio" name="q6" value="A"> (ক) \(0\)</label>
+              <label class="option-label"><input type="radio" name="q6" value="B"> (খ) \(1\)</label>
+              <label class="option-label"><input type="radio" name="q6" value="C"> (গ) \(-1\)</label>
+              <label class="option-label"><input type="radio" name="q6" value="D"> (ঘ) \(\hat{i}\)</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • চক্রীয় ক্রমে আয়ত একক ভেক্টরের ক্রস গুণন: <span class="highlight">\( \hat{i} \times \hat{j} = \hat{k} \)</span>।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(খ) \(1\)</span>। আমরা জানি \(\hat{j} \times \hat{k} = \hat{i}\)। সুতরাং \(\hat{i} \cdot \hat{i} = 1\)।
             </div>
           </div>
 
+          <!-- প্রশ্ন ৭ -->
           <div class="mcq-card" id="qCard-7">
-            <div class="question-title">৭. নদীর প্রস্থ 2 km, স্রোতের বেগ 3 km/h এবং নৌকার বেগ 6 km/h হলে ন্যূনতম সময়ে নদী পার হতে কত সময় লাগবে?</div>
+            <div class="question-title">০৭. স্কেলার ক্ষেত্রের গ্রেডিয়েন্ট (Gradient) একটি—</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q7" value="A"> 0.20 hr</label>
-              <label class="option-label"><input type="radio" name="q7" value="B"> 0.33 hr</label>
-              <label class="option-label"><input type="radio" name="q7" value="C"> 0.50 hr</label>
-              <label class="option-label"><input type="radio" name="q7" value="D"> 1.00 hr</label>
+              <label class="option-label"><input type="radio" name="q7" value="A"> (ক) স্কেলার রাশি</label>
+              <label class="option-label"><input type="radio" name="q7" value="B"> (খ) ভেক্টর রাশি</label>
+              <label class="option-label"><input type="radio" name="q7" value="C"> (গ) এককহীন রাশি</label>
+              <label class="option-label"><input type="radio" name="q7" value="D"> (ঘ) ক্ষেত্রফল</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • ন্যূনতম সময়ের শর্তে \( \alpha = 90^\circ \) এ রওনা দিতে হয়।<br/>
-              • \( t_{min} = \frac{d}{v} = \frac{2}{6} = \mathbf{0.33} \) hr (বা 20 মিনিট)।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(খ) ভেক্টর রাশি</span>। গ্রেডিয়েন্ট স্কেলার ক্ষেত্রকে ভেক্টর ক্ষেত্রে রূপান্তরিত করে এবং এর অভিমুখ সর্বোচ্চ বৃদ্ধির দিকে হয়।
             </div>
           </div>
 
+          <!-- প্রশ্ন ৮ -->
           <div class="mcq-card" id="qCard-8">
-            <div class="question-title">৮. কোনো ভেক্টর ক্ষেত্রের কার্ল শূন্য হলে (\( \vec{\nabla} \times \vec{V} = 0 \)) ক্ষেত্রটিকে কী বলা হয়?</div>
+            <div class="question-title">০৮. কোনো ভেক্টর ক্ষেত্রের ডাইভারজেন্স (Divergence) শূন্য হলে তাকে কী বলে?</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q8" value="A"> সলিনয়ডাল</label>
-              <label class="option-label"><input type="radio" name="q8" value="B"> অঘূর্ণনশীল ও সংরক্ষণশীল</label>
-              <label class="option-label"><input type="radio" name="q8" value="C"> অপসারী ক্ষেত্র</label>
-              <label class="option-label"><input type="radio" name="q8" value="D"> ভেক্টর ডাইভারজেন্স</label>
+              <label class="option-label"><input type="radio" name="q8" value="A"> (ক) সোলেনয়ডাল (Solenoidal)</label>
+              <label class="option-label"><input type="radio" name="q8" value="B"> (খ) অঘূর্ণনশীল (Irrotational)</label>
+              <label class="option-label"><input type="radio" name="q8" value="C"> (গ) ল্যামিনার (Laminar)</label>
+              <label class="option-label"><input type="radio" name="q8" value="D"> (ঘ) কনজারভেটিভ (Conservative)</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • কার্ল শূন্য হলে ভেক্টর ক্ষেত্রটি <span class="highlight">অঘূর্ণনশীল (Irrotational)</span> ও সংরক্ষণশীল হয়।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(ক) সোলেনয়ডাল (Solenoidal)</span>। \(\nabla \cdot \vec{V} = 0\) হলে ক্ষেত্রটিকে সোলেনয়ডাল বা আয়তন সংরক্ষণশীল বলা হয়।
             </div>
           </div>
 
+          <!-- প্রশ্ন ৯ -->
           <div class="mcq-card" id="qCard-9">
-            <div class="question-title">৯. \( \vec{r} = x\hat{i} + y\hat{j} + z\hat{k} \) হলে \( \vec{\nabla} \cdot \vec{r} \) এর মান কত?</div>
+            <div class="question-title">০৯. কোনো ভেক্টর ক্ষেত্রের কার্ল (Curl) শূন্য হলে ক্ষেত্রটি হবে—</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q9" value="A"> 3</label>
-              <label class="option-label"><input type="radio" name="q9" value="B"> 2</label>
-              <label class="option-label"><input type="radio" name="q9" value="C"> 1</label>
-              <label class="option-label"><input type="radio" name="q9" value="D"> 0</label>
+              <label class="option-label"><input type="radio" name="q9" value="A"> (ক) ঘূর্ণনশীল</label>
+              <label class="option-label"><input type="radio" name="q9" value="B"> (খ) অঘূর্ণনশীল ও সংরক্ষণশীল</label>
+              <label class="option-label"><input type="radio" name="q9" value="C"> (গ) অসংরক্ষণশীল</label>
+              <label class="option-label"><input type="radio" name="q9" value="D"> (ঘ) সোলেনয়ডাল</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • \( \vec{\nabla} \cdot \vec{r} = 1 + 1 + 1 = \mathbf{3} \)।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(খ) অঘূর্ণনশীল ও সংরক্ষণশীল</span>। \(\nabla \times \vec{V} = 0\) হলে ভেক্টর ক্ষেত্রটি অঘূর্ণনশীল (Irrotational) হয়।
             </div>
           </div>
 
+          <!-- প্রশ্ন ১০ -->
           <div class="mcq-card" id="qCard-10">
-            <div class="question-title">১০. দুটি সমান মানের ভেক্টরের লব্ধির মান এদের মানের \( \sqrt{3} \) গুণ হলে মধ্যবর্তী কোণ কত?</div>
+            <div class="question-title">১০. \(6\text{ N}\) ও \(8\text{ N}\) মানের দুটি ভেক্টরের লব্ধির সর্বনিম্ন মান কত হতে পারে?</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q10" value="A"> \( 30^\circ \)</label>
-              <label class="option-label"><input type="radio" name="q10" value="B"> \( 60^\circ \)</label>
-              <label class="option-label"><input type="radio" name="q10" value="C"> \( 90^\circ \)</label>
-              <label class="option-label"><input type="radio" name="q10" value="D"> \( 120^\circ \)</label>
+              <label class="option-label"><input type="radio" name="q10" value="A"> (ক) \(14\text{ N}\)</label>
+              <label class="option-label"><input type="radio" name="q10" value="B"> (খ) \(10\text{ N}\)</label>
+              <label class="option-label"><input type="radio" name="q10" value="C"> (গ) \(2\text{ N}\)</label>
+              <label class="option-label"><input type="radio" name="q10" value="D"> (ঘ) \(0\text{ N}\)</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • \( R = P\sqrt{3} \) হলে \( \alpha = 60^\circ \) ।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(গ) \(2\text{ N}\)</span>। লব্ধির সর্বনিম্ন মান \(R_{\min} = P - Q = 8 - 6 = 2\text{ N}\) (যখন মধ্যবর্তী কোণ \(180^\circ\))।
             </div>
           </div>
 
+          <!-- প্রশ্ন ১১ -->
           <div class="mcq-card" id="qCard-11">
-            <div class="question-title">১১. \( \vec{A} = 2\hat{i} - 3\hat{j} + \hat{k} \) এবং \( \vec{B} = 3\hat{i} + \hat{j} - 2\hat{k} \) হলে \( \vec{A} \cdot \vec{B} \) এর মান কত?</div>
+            <div class="question-title">১১. সামান্তরিকের দুটি সংনিহিত বাহু \(\vec{A}\) ও \(\vec{B}\) দ্বারা নির্দেশিত হলে এর ক্ষেত্রফল কত?</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q11" value="A"> -2</label>
-              <label class="option-label"><input type="radio" name="q11" value="B"> -1</label>
-              <label class="option-label"><input type="radio" name="q11" value="C"> 5</label>
-              <label class="option-label"><input type="radio" name="q11" value="D"> 3</label>
+              <label class="option-label"><input type="radio" name="q11" value="A"> (ক) \(\vec{A} \cdot \vec{B}\)</label>
+              <label class="option-label"><input type="radio" name="q11" value="B"> (খ) \(|\vec{A} \times \vec{B}|\)</label>
+              <label class="option-label"><input type="radio" name="q11" value="C"> (গ) \(\frac{1}{2}|\vec{A} \times \vec{B}|\)</label>
+              <label class="option-label"><input type="radio" name="q11" value="D"> (ঘ) \(AB\cos\theta\)</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • \( \vec{A} \cdot \vec{B} = 6 - 3 - 2 = \mathbf{-1} \)।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(খ) \(|\vec{A} \times \vec{B}|\)</span>। সামান্তরিকের ক্ষেত্রফল হলো সংনিহিত বাহুদ্বয়ের ক্রস গুণনের মানের সমান।
             </div>
           </div>
 
-          <!-- নতুন ১২ নম্বর প্রশ্ন -->
+          <!-- প্রশ্ন ১২ -->
           <div class="mcq-card" id="qCard-12">
-            <div class="question-title">১২. \( \vec{A} = 2\hat{i} + \hat{j} - 2\hat{k} \) ভেক্টরের দিকে একক ভেক্টর কোনটি?</div>
+            <div class="question-title">১২. সামান্তরিকের দুটি কর্ণ \(\vec{d_1}\) ও \(\vec{d_2}\) হলে এর ক্ষেত্রফল কত?</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q12" value="A"> \( \frac{1}{3}(2\hat{i} + \hat{j} - 2\hat{k}) \)</label>
-              <label class="option-label"><input type="radio" name="q12" value="B"> \( \frac{1}{9}(2\hat{i} + \hat{j} - 2\hat{k}) \)</label>
-              <label class="option-label"><input type="radio" name="q12" value="C"> \( \frac{1}{\sqrt{5}}(2\hat{i} + \hat{j} - 2\hat{k}) \)</label>
-              <label class="option-label"><input type="radio" name="q12" value="D"> \( 2\hat{i} + \hat{j} - 2\hat{k} \)</label>
+              <label class="option-label"><input type="radio" name="q12" value="A"> (ক) \(|\vec{d_1} \times \vec{d_2}|\)</label>
+              <label class="option-label"><input type="radio" name="q12" value="B"> (খ) \(\frac{1}{2}|\vec{d_1} \times \vec{d_2}|\)</label>
+              <label class="option-label"><input type="radio" name="q12" value="C"> (গ) \(\vec{d_1} \cdot \vec{d_2}\)</label>
+              <label class="option-label"><input type="radio" name="q12" value="D"> (ঘ) \(\frac{1}{2}(\vec{d_1} \cdot \vec{d_2})\)</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • <span class="blue-heading">একক ভেক্টর নির্ণয়:</span> \( \hat{a} = \frac{\vec{A}}{|\vec{A}|} \)<br/>
-              • \( |\vec{A}| = \sqrt{2^2 + 1^2 + (-2)^2} = \sqrt{4 + 1 + 4} = \sqrt{9} = \mathbf{3} \)<br/>
-              • অতএব, একক ভেক্টর = <span class="highlight">\( \frac{1}{3}(2\hat{i} + \hat{j} - 2\hat{k}) \)</span>।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(খ) \(\frac{1}{2}|\vec{d_1} \times \vec{d_2}|\)</span>। কর্ণের মাধ্যমে সামান্তরিকের ক্ষেত্রফল \(\frac{1}{2}|\vec{d_1} \times \vec{d_2}|\)।
             </div>
           </div>
 
-          <!-- নতুন ১৩ নম্বর প্রশ্ন -->
+          <!-- প্রশ্ন ১৩ -->
           <div class="mcq-card" id="qCard-13">
-            <div class="question-title">১৩. প্রসঙ্গ কাঠামোর মূলবিন্দুর সাপেক্ষে কোনো বিন্দুর অবস্থান নির্দেশকারী ভেক্টরকে কী বলা হয়?</div>
+            <div class="question-title">১৩. একটি একক ভেক্টরের মান কত?</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q13" value="A"> সরণ ভেক্টর</label>
-              <label class="option-label"><input type="radio" name="q13" value="B"> ব্যাসার্ধ ভেক্টর</label>
-              <label class="option-label"><input type="radio" name="q13" value="C"> বিপরীত ভেক্টর</label>
-              <label class="option-label"><input type="radio" name="q13" value="D"> বিপ্রতীপ ভেক্টর</label>
+              <label class="option-label"><input type="radio" name="q13" value="A"> (ক) \(0\)</label>
+              <label class="option-label"><input type="radio" name="q13" value="B"> (খ) \(1\)</label>
+              <label class="option-label"><input type="radio" name="q13" value="C"> (গ) অনির্ণীত</label>
+              <label class="option-label"><input type="radio" name="q13" value="D"> (ঘ) ভেক্টরের আদিমানের সমান</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • প্রসঙ্গ কাঠামোর মূলবিন্দুর সাপেক্ষে যেকোনো বিন্দুর অবস্থান যে ভেক্টরের সাহায্যে নির্দেশ করা হয়, তাকে <span class="highlight">অবস্থান ভেক্টর (Position Vector)</span> বা ব্যাসার্ধ ভেক্টর বলা হয়।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(খ) \(1\)</span>। যে ভেক্টরের মান এক একক তাকে একক ভেক্টর বলে।
             </div>
           </div>
 
+          <!-- প্রশ্ন ১৪ -->
           <div class="mcq-card" id="qCard-14">
-            <div class="question-title">১৪. সামান্তরিকের দুটি সন্নিহিত বাহু যথাক্রমে দুটি ভেক্টর নির্দেশ করলে তাদের ক্রস গুণফলের মান কী নির্দেশ করে?</div>
+            <div class="question-title">১৪. অবস্থান ভেক্টরকে কোনটি দ্বারা প্রকাশ করা হয়?</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q14" value="A"> ত্রিভুজের ক্ষেত্রফল</label>
-              <label class="option-label"><input type="radio" name="q14" value="B"> সামান্তরিকের পরিসীমা</label>
-              <label class="option-label"><input type="radio" name="q14" value="C"> সামান্তরিকের ক্ষেত্রফল</label>
-              <label class="option-label"><input type="radio" name="q14" value="D"> আয়তন</label>
+              <label class="option-label"><input type="radio" name="q14" value="A"> (ক) \(\vec{r}\)</label>
+              <label class="option-label"><input type="radio" name="q14" value="B"> (খ) \(\vec{v}\)</label>
+              <label class="option-label"><input type="radio" name="q14" value="C"> (গ) \(\vec{a}\)</label>
+              <label class="option-label"><input type="radio" name="q14" value="D"> (ঘ) \(\vec{F}\)</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • সামান্তরিকের ক্ষেত্রফল = <span class="highlight">\( |\vec{P} \times \vec{Q}| \)</span>।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(ক) \(\vec{r}\)</span>। মূলবিন্দুর সাপেক্ষে কোনো বিন্দুর অবস্থান যে ভেক্টর দিয়ে নির্দেশ করা হয় তাকে অবস্থান ভেক্টর (\(\vec{r}\)) বলে।
             </div>
           </div>
 
+          <!-- প্রশ্ন ১৫ -->
           <div class="mcq-card" id="qCard-15">
-            <div class="question-title">১৫. \( \vec{A} = 2\hat{i} + m\hat{j} + \hat{k} \) এবং \( \vec{B} = 4\hat{i} - 2\hat{j} - 2\hat{k} \) পরস্পর লম্ব হলে m এর মান কত?</div>
+            <div class="question-title">১৫. দুটি বিপরীতমুখী সমান্তরাল ভেক্টরের লব্ধি হলো—</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q15" value="A"> 2</label>
-              <label class="option-label"><input type="radio" name="q15" value="B"> 3</label>
-              <label class="option-label"><input type="radio" name="q15" value="C"> -3</label>
-              <label class="option-label"><input type="radio" name="q15" value="D"> 4</label>
+              <label class="option-label"><input type="radio" name="q15" value="A"> (ক) তাদের মানের যোগফল</label>
+              <label class="option-label"><input type="radio" name="q15" value="B"> (খ) তাদের মানের বিয়োগফল</label>
+              <label class="option-label"><input type="radio" name="q15" value="C"> (গ) শূন্য</label>
+              <label class="option-label"><input type="radio" name="q15" value="D"> (ঘ) গুণফলের সমান</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • লম্ব শর্তে ডট গুণফল শূন্য হবে, ফলে <span class="highlight">m = 3</span>।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(খ) তাদের মানের বিয়োগফল</span>। \(\alpha = 180^\circ\) হলে লব্ধি \(R = P - Q\) হয়।
             </div>
           </div>
 
+          <!-- প্রশ্ন ১৬ -->
           <div class="mcq-card" id="qCard-16">
-            <div class="question-title">১৬. তিনটি ভেক্টর একই সমতলে অবস্থান করার শর্ত কী?</div>
+            <div class="question-title">১৬. \(\vec{A} = \hat{i} + \hat{j}\) ভেক্টরের মান কত?</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q16" value="A"> \( \vec{A} \cdot (\vec{B} \times \vec{C}) = 0 \)</label>
-              <label class="option-label"><input type="radio" name="q16" value="B"> \( \vec{A} \times (\vec{B} \times \vec{C}) = 0 \)</label>
-              <label class="option-label"><input type="radio" name="q16" value="C"> \( \vec{A} \cdot \vec{B} = 0 \)</label>
-              <label class="option-label"><input type="radio" name="q16" value="D"> \( \vec{A} \times \vec{B} = 0 \)</label>
+              <label class="option-label"><input type="radio" name="q16" value="A"> (ক) \(1\)</label>
+              <label class="option-label"><input type="radio" name="q16" value="B"> (খ) \(2\)</label>
+              <label class="option-label"><input type="radio" name="q16" value="C"> (গ) \(\sqrt{2}\)</label>
+              <label class="option-label"><input type="radio" name="q16" value="D"> (ঘ) \(0\)</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • শর্ত: <span class="highlight">\( \vec{A} \cdot (\vec{B} \times \vec{C}) = 0 \)</span>।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(গ) \(\sqrt{2}\)</span>। \(|\vec{A}| = \sqrt{1^2 + 1^2} = \sqrt{2}\)।
             </div>
           </div>
 
+          <!-- প্রশ্ন ১৭ -->
           <div class="mcq-card" id="qCard-17">
-            <div class="question-title">১৭. নদীর স্রোতের সাথে কত কোণে নৌকা চালালে নদীটি সর্বনিম্ন দূরত্বে পার হওয়া যাবে?</div>
+            <div class="question-title">১৭. \(\hat{i} \times \hat{j} = ?\)</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q17" value="A"> \( 90^\circ \)</label>
-              <label class="option-label"><input type="radio" name="q17" value="B"> \( \cos^{-1}\left(-\frac{u}{v}\right) \)</label>
-              <label class="option-label"><input type="radio" name="q17" value="C"> \( 0^\circ \)</label>
-              <label class="option-label"><input type="radio" name="q17" value="D"> \( 180^\circ \)</label>
+              <label class="option-label"><input type="radio" name="q17" value="A"> (ক) \(\hat{k}\)</label>
+              <label class="option-label"><input type="radio" name="q17" value="B"> (খ) \(-\hat{k}\)</label>
+              <label class="option-label"><input type="radio" name="q17" value="C"> (গ) \(1\)</label>
+              <label class="option-label"><input type="radio" name="q17" value="D"> (ঘ) \(0\)</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • সর্বনিম্ন দূরত্বে পার হতে \( \alpha = \cos^{-1}\left(-\frac{u}{v}\right) \) কোণে রওনা হতে হয়।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(ক) \(\hat{k}\)</span>। ডানহাতি কার্তেসীয় স্থানাঙ্ক ব্যবস্থায় আয়ত একক ভেক্টরের চক্রীয় ক্রস গুণনে \(\hat{i} \times \hat{j} = \hat{k}\)।
             </div>
           </div>
 
+          <!-- প্রশ্ন ১৮ -->
           <div class="mcq-card" id="qCard-18">
-            <div class="question-title">১৮. নিচের কোনটি ভেক্টর অপারেটর বা ডেল (Del) অপারেটর?</div>
+            <div class="question-title">১৮. \(\hat{i} \cdot \hat{i} = ?\)</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q18" value="A"> \( \frac{\partial}{\partial x} + \frac{\partial}{\partial y} \)</label>
-              <label class="option-label"><input type="radio" name="q18" value="B"> \( \hat{i}\frac{\partial}{\partial x} + \hat{j}\frac{\partial}{\partial y} + \hat{k}\frac{\partial}{\partial z} \)</label>
-              <label class="option-label"><input type="radio" name="q18" value="C"> \( \nabla^2 \)</label>
-              <label class="option-label"><input type="radio" name="q18" value="D"> \( \frac{d}{dx} \)</label>
+              <label class="option-label"><input type="radio" name="q18" value="A"> (ক) \(0\)</label>
+              <label class="option-label"><input type="radio" name="q18" value="B"> (খ) \(1\)</label>
+              <label class="option-label"><input type="radio" name="q18" value="C"> (গ) \(\hat{k}\)</label>
+              <label class="option-label"><input type="radio" name="q18" value="D"> (ঘ) অনির্ণীত</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • ডেল অপারেটর: <span class="highlight">\( \vec{\nabla} = \hat{i}\frac{\partial}{\partial x} + \hat{j}\frac{\partial}{\partial y} + \hat{k}\frac{\partial}{\partial z} \)</span>।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(খ) \(1\)</span>। নিজ অক্ষের সাথে আয়ত একক ভেক্টরের ডট গুণন \(\hat{i} \cdot \hat{i} = (1)(1)\cos(0^\circ) = 1\) হয়।
             </div>
           </div>
 
+          <!-- প্রশ্ন ১৯ -->
           <div class="mcq-card" id="qCard-19">
-            <div class="question-title">১৯. কোনো স্কেলার ক্ষেত্রের গ্রেডিয়েন্ট হলো একটি—</div>
+            <div class="question-title">১৯. বৃষ্টির ফোটা খাড়া নিচের দিকে পড়লে এবং বাতাস অনুভূমিকভাবে বইলে ছাতা কীভাবে ধরতে হবে?</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q19" value="A"> স্কেলার রাশি</label>
-              <label class="option-label"><input type="radio" name="q19" value="B"> ভেক্টর রাশি</label>
-              <label class="option-label"><input type="radio" name="q19" value="C"> টেনসর রাশি</label>
-              <label class="option-label"><input type="radio" name="q19" value="D"> নাল ভেক্টর</label>
+              <label class="option-label"><input type="radio" name="q19" value="A"> (ক) খাড়াভাবে</label>
+              <label class="option-label"><input type="radio" name="q19" value="B"> (খ) অনুভূমিকভাবে</label>
+              <label class="option-label"><input type="radio" name="q19" value="C"> (গ) আনতভাবে (কোণ করে)</label>
+              <label class="option-label"><input type="radio" name="q19" value="D"> (ঘ) ছাতা ধরার প্রয়োজন নেই</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • গ্রেডিয়েন্ট হলো একটি <span class="highlight">ভেক্টর রাশি</span>।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(গ) আনতভাবে (কোণ করে)</span>। বৃষ্টি ও বাতাসের আপেক্ষিক বেগের অভিমুখে ছাতা ধরতে হয়, যা একটি আনত কোণ তৈরি করে।
             </div>
           </div>
 
+          <!-- প্রশ্ন ২০ -->
           <div class="mcq-card" id="qCard-20">
-            <div class="question-title">২০. কোনো ভেক্টর ক্ষেত্রের ডাইভারজেন্স হলো একটি—</div>
+            <div class="question-title">২০. লব্ধির সর্বোচ্চ মান পাওয়ার জন্য ভেক্টরদ্বয়ের মধ্যবর্তী কোণ কত হওয়া প্রয়োজন?</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q20" value="A"> ভেক্টর রাশি</label>
-              <label class="option-label"><input type="radio" name="q20" value="B"> টেনসর রাশি</label>
-              <label class="option-label"><input type="radio" name="q20" value="C"> স্কেলার রাশি</label>
-              <label class="option-label"><input type="radio" name="q20" value="D"> অক্ষীয় ভেক্টর</label>
+              <label class="option-label"><input type="radio" name="q20" value="A"> (ক) \(0^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q20" value="B"> (খ) \(90^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q20" value="C"> (গ) \(180^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q20" value="D"> (ঘ) \(360^\circ\)</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • ডাইভারজেন্স হলো একটি <span class="highlight">স্কেলার রাশি</span>।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(ক) \(0^\circ\)</span>। \(\cos(0^\circ) = 1\) হলে \(R_{\max} = P + Q\) হয়।
             </div>
           </div>
 
+          <!-- প্রশ্ন ২১ -->
           <div class="mcq-card" id="qCard-21">
-            <div class="question-title">২১. ট্রলির হাতল লম্বা রাখা হয় কেন?</div>
+            <div class="question-title">২১. \(m\) এর মান কত হলে \(\vec{A} = 2\hat{i} + 3\hat{j} - \hat{k}\) এবং \(\vec{B} = m\hat{i} - 2\hat{j} + 4\hat{k}\) ভেক্টর দুটি পরস্পর লম্ব হবে?</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q21" value="A"> ওজন বাড়ানোর জন্য</label>
-              <label class="option-label"><input type="radio" name="q21" value="B"> টানের বলের অনুভূমিক উপাংশ বাড়িয়ে সহজ করার জন্য</label>
-              <label class="option-label"><input type="radio" name="q21" value="C"> ঘর্ষণ কমানোর জন্য</label>
-              <label class="option-label"><input type="radio" name="q21" value="D"> গতি থামানোর জন্য</label>
+              <label class="option-label"><input type="radio" name="q21" value="A"> (ক) \(3\)</label>
+              <label class="option-label"><input type="radio" name="q21" value="B"> (খ) \(5\)</label>
+              <label class="option-label"><input type="radio" name="q21" value="C"> (গ) \(10\)</label>
+              <label class="option-label"><input type="radio" name="q21" value="D"> (ঘ) \(-5\)</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • অনুভূমিক উপাংশ বাড়িয়ে ট্রলি টানা সহজ করতে।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(খ) \(5\)</span>। পরস্পর লম্ব হওয়ার শর্ত: \(\vec{A} \cdot \vec{B} = 0 \implies 2m - 6 - 4 = 0 \implies 2m = 10 \implies m = 5\)।
             </div>
           </div>
 
+          <!-- প্রশ্ন ২২ -->
           <div class="mcq-card" id="qCard-22">
-            <div class="question-title">২২. \( \hat{j} \cdot \hat{k} \) এর মান কত?</div>
+            <div class="question-title">২২. \(\vec{A} = 2\hat{i} + 2\hat{j} - \hat{k}\) ভেক্টরের উপর \(\vec{B} = 6\hat{i} - 3\hat{j} + 2\hat{k}\) ভেক্টরের অভিক্ষেপ (Projection) কত?</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q22" value="A"> 1</label>
-              <label class="option-label"><input type="radio" name="q22" value="B"> 0</label>
-              <label class="option-label"><input type="radio" name="q22" value="C"> i</label>
-              <label class="option-label"><input type="radio" name="q22" value="D"> -i</label>
+              <label class="option-label"><input type="radio" name="q22" value="A"> (ক) \(\frac{4}{3}\)</label>
+              <label class="option-label"><input type="radio" name="q22" value="B"> (খ) \(2\)</label>
+              <label class="option-label"><input type="radio" name="q22" value="C"> (গ) \(\frac{8}{3}\)</label>
+              <label class="option-label"><input type="radio" name="q22" value="D"> (ঘ) \(4\)</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • লম্ব একক ভেক্টরের ডট গুণফল সর্বদা <span class="highlight">0</span> হয়।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(ক) \(\frac{4}{3}\)</span>। \(\vec{A}\) এর উপর \(\vec{B}\) এর অভিক্ষেপ = \(\frac{\vec{A} \cdot \vec{B}}{|\vec{A}|} = \frac{(2)(6) + (2)(-3) + (-1)(2)}{\sqrt{2^2 + 2^2 + (-1)^2}} = \frac{12 - 6 - 2}{\sqrt{9}} = \frac{4}{3}\)।
             </div>
           </div>
 
+          <!-- প্রশ্ন ২৩ -->
           <div class="mcq-card" id="qCard-23">
-            <div class="question-title">২৩. দুটি ভেক্টরের যোগফল ও বিয়োগফলের মান সমান হলে এদের মধ্যবর্তী কোণ কত?</div>
+            <div class="question-title">২৩. একটি নদী পার হয়ে সোজাসুজি অপর পাড়ে পৌঁছাতে সাঁতারুকে নদীর স্রোতের সাথে কত কোণে সাঁতার কাটতে হবে? (স্রোতের বেগ \(v\), সাঁতারুর বেগ \(u\), যেখানে \(u > v\))</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q23" value="A"> \( 0^\circ \)</label>
-              <label class="option-label"><input type="radio" name="q23" value="B"> \( 60^\circ \)</label>
-              <label class="option-label"><input type="radio" name="q23" value="C"> \( 90^\circ \)</label>
-              <label class="option-label"><input type="radio" name="q23" value="D"> \( 180^\circ \)</label>
+              <label class="option-label"><input type="radio" name="q23" value="A"> (ক) \(\alpha = \sin^{-1}(v/u)\)</label>
+              <label class="option-label"><input type="radio" name="q23" value="B"> (খ) \(\alpha = \cos^{-1}(-v/u)\)</label>
+              <label class="option-label"><input type="radio" name="q23" value="C"> (গ) \(\alpha = \tan^{-1}(v/u)\)</label>
+              <label class="option-label"><input type="radio" name="q23" value="D"> (ঘ) \(\alpha = 90^\circ\)</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • মধ্যবর্তী কোণ <span class="highlight">\( 90^\circ \)</span>।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(খ) \(\alpha = \cos^{-1}(-v/u)\)</span>। সোজা অপর পাড়ে পৌঁছাতে  লব্ধি বেগ নদী পারাপারের খাড়া বরাবর হতে হয়, তাই \(\cos\alpha = -v/u \implies \alpha = \cos^{-1}(-v/u)\)।
             </div>
           </div>
 
+          <!-- প্রশ্ন ২৪ -->
           <div class="mcq-card" id="qCard-24">
-            <div class="question-title">২৪. বৃষ্টি থেকে রক্ষা পেতে চলন্ত ব্যক্তির ছাতা কোন দিকে ঝোঁকাতে হয়?</div>
+            <div class="question-title">২৪. \(\phi(x, y, z) = x^2 y + z^3\) স্কেলার ক্ষেত্রের (1, -1, 1) বিন্দুতে গ্রেডিয়েন্ট \(\nabla \phi\) কত?</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q24" value="A"> পিছনের দিকে</label>
-              <label class="option-label"><input type="radio" name="q24" value="B"> সামনের দিকে</label>
-              <label class="option-label"><input type="radio" name="q24" value="C"> সোজাসুজি উপরে</label>
-              <label class="option-label"><input type="radio" name="q24" value="D"> ডানে</label>
+              <label class="option-label"><input type="radio" name="q24" value="A"> (ক) \(-2\hat{i} + \hat{j} + 3\hat{k}\)</label>
+              <label class="option-label"><input type="radio" name="q24" value="B"> (খ) \(2\hat{i} - \hat{j} + 3\hat{k}\)</label>
+              <label class="option-label"><input type="radio" name="q24" value="C"> (গ) \(-2\hat{i} - \hat{j} - 3\hat{k}\)</label>
+              <label class="option-label"><input type="radio" name="q24" value="D"> (ঘ) \(2\hat{i} + \hat{j} - 3\hat{k}\)</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • আপেক্ষিক বেগের কারণে <span class="highlight">সামনের দিকে</span> ছাতা ঝোঁকাতে হয়।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(ক) \(-2\hat{i} + \hat{j} + 3\hat{k}\)</span>। \(\nabla \phi = \frac{\partial \phi}{\partial x}\hat{i} + \frac{\partial \phi}{\partial y}\hat{j} + \frac{\partial \phi}{\partial z}\hat{k} = (2xy)\hat{i} + (x^2)\hat{j} + (3z^2)\hat{k}\)। (1,-1,1) বিন্দুতে মান বসালে: \(2(1)(-1)\hat{i} + (1)^2\hat{j} + 3(1)^2\hat{k} = -2\hat{i} + \hat{j} + 3\hat{k}\)।
             </div>
           </div>
 
+          <!-- প্রশ্ন ২৫ -->
           <div class="mcq-card" id="qCard-25">
-            <div class="question-title">২৫. কোন ভেক্টরের দিক নেই?</div>
+            <div class="question-title">২৫. যদি \(\vec{A} + \vec{B} = \vec{C}\) এবং \(A^2 + B^2 = C^2\) হয়, তবে \(\vec{A}\) ও \(\vec{B}\) এর মধ্যবর্তী কোণ কত?</div>
             <div class="options-grid">
-              <label class="option-label"><input type="radio" name="q25" value="A"> একক ভেক্টর</label>
-              <label class="option-label"><input type="radio" name="q25" value="B"> নাল ভেক্টর</label>
-              <label class="option-label"><input type="radio" name="q25" value="C"> সমরেখ ভেক্টর</label>
-              <label class="option-label"><input type="radio" name="q25" value="D"> অবস্থান ভেক্টর</label>
+              <label class="option-label"><input type="radio" name="q25" value="A"> (ক) \(0^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q25" value="B"> (খ) \(45^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q25" value="C"> (গ) \(90^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q25" value="D"> (ঘ) \(180^\circ\)</label>
             </div>
             <div class="solution-notes">
               <h4>ব্যাখ্যা ও সমাধান:</h4>
-              • পাদবিন্দু ও শীর্ষবিন্দু একই হলে তাকে <span class="highlight">নাল ভেক্টর</span> বলে।এর কোনো দিক নেই।
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(গ) \(90^\circ\)</span>। \(C^2 = A^2 + B^2 + 2AB\cos\alpha \implies A^2 + B^2 = A^2 + B^2 + 2AB\cos\alpha \implies 2AB\cos\alpha = 0 \implies \cos\alpha = 0 \implies \alpha = 90^\circ\)।
+            </div>
+          </div>
+
+          <!-- প্রশ্ন ২৬ -->
+          <div class="mcq-card" id="qCard-26">
+            <div class="question-title">২৬. \(\vec{A} = \hat{i} + \hat{j}\) এবং \(\vec{B} = \hat{j} + \hat{k}\) ভেক্টরদ্বয়ের মধ্যবর্তী কোণ কত?</div>
+            <div class="options-grid">
+              <label class="option-label"><input type="radio" name="q26" value="A"> (ক) \(30^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q26" value="B"> (খ) \(45^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q26" value="C"> (গ) \(60^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q26" value="D"> (ঘ) \(90^\circ\)</label>
+            </div>
+            <div class="solution-notes">
+              <h4>ব্যাখ্যা ও সমাধান:</h4>
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(গ) \(60^\circ\)</span>। \(\vec{A} \cdot \vec{B} = (1)(0) + (1)(1) + (0)(1) = 1\)। \(|\vec{A}| = \sqrt{2}\), \(|\vec{B}| = \sqrt{2}\)। \(\cos\theta = \frac{1}{\sqrt{2} \cdot \sqrt{2}} = \frac{1}{2} \implies \theta = 60^\circ\)।
+            </div>
+          </div>
+
+          <!-- প্রশ্ন ২৭ -->
+          <div class="mcq-card" id="qCard-27">
+            <div class="question-title">২৭. \(a\) এর মান কত হলে \(\vec{V} = (x + 3y)\hat{i} + (y - 2z)\hat{j} + (x + az)\hat{k}\) ভেক্টর ক্ষেত্রটি সোলেনয়ডাল হবে?</div>
+            <div class="options-grid">
+              <label class="option-label"><input type="radio" name="q27" value="A"> (ক) \(1\)</label>
+              <label class="option-label"><input type="radio" name="q27" value="B"> (খ) \(-2\)</label>
+              <label class="option-label"><input type="radio" name="q27" value="C"> (গ) \(2\)</label>
+              <label class="option-label"><input type="radio" name="q27" value="D"> (ঘ) \(0\)</label>
+            </div>
+            <div class="solution-notes">
+              <h4>ব্যাখ্যা ও সমাধান:</h4>
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(খ) \(-2\)</span>। সোলেনয়ডাল হতে হলে \(\nabla \cdot \vec{V} = 0\) হতে হবে। \(\frac{\partial}{\partial x}(x+3y) + \frac{\partial}{\partial y}(y-2z) + \frac{\partial}{\partial z}(x+az) = 1 + 1 + a = 2 + a = 0 \implies a = -2\)।
+            </div>
+          </div>
+
+          <!-- প্রশ্ন ২৮ -->
+          <div class="mcq-card" id="qCard-28">
+            <div class="question-title">২৮. ত্রিমাত্রিক স্থানাঙ্ক ব্যবস্থায় দুটি বিন্দু P(1, 2, 3) এবং Q(4, 6, 8) হলে \(\vec{PQ}\) ভেক্টরের মান কত?</div>
+            <div class="options-grid">
+              <label class="option-label"><input type="radio" name="q28" value="A"> (ক) \(\sqrt{50}\)</label>
+              <label class="option-label"><input type="radio" name="q28" value="B"> (খ) \(\sqrt{42}\)</label>
+              <label class="option-label"><input type="radio" name="q28" value="C"> (গ) \(5\)</label>
+              <label class="option-label"><input type="radio" name="q28" value="D"> (ঘ) \(7\)</label>
+            </div>
+            <div class="solution-notes">
+              <h4>ব্যাখ্যা ও সমাধান:</h4>
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(ক) \(\sqrt{50}\)</span>। \(\vec{PQ} = (4-1)\hat{i} + (6-2)\hat{j} + (8-3)\hat{k} = 3\hat{i} + 4\hat{j} + 5\hat{k}\)। \(|\vec{PQ}| = \sqrt{3^2 + 4^2 + 5^2} = \sqrt{9 + 16 + 25} = \sqrt{50} = 5\sqrt{2}\)।
+            </div>
+          </div>
+
+          <!-- প্রশ্ন ২৯ -->
+          <div class="mcq-card" id="qCard-29">
+            <div class="question-title">২৯. \(|\vec{A} \times \vec{B}| = \sqrt{3}(\vec{A} \cdot \vec{B})\) হলে ভেক্টরদ্বয়ের মধ্যবর্তী কোণ কত?</div>
+            <div class="options-grid">
+              <label class="option-label"><input type="radio" name="q29" value="A"> (ক) \(30^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q29" value="B"> (খ) \(45^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q29" value="C"> (গ) \(60^\circ\)</label>
+              <label class="option-label"><input type="radio" name="q29" value="D"> (ঘ) \(90^\circ\)</label>
+            </div>
+            <div class="solution-notes">
+              <h4>ব্যাখ্যা ও সমাধান:</h4>
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(গ) \(60^\circ\)</span>। \(AB\sin\theta = \sqrt{3} AB\cos\theta \implies \frac{\sin\theta}{\cos\theta} = \sqrt{3} \implies \tan\theta = \sqrt{3} \implies \theta = 60^\circ\)।
+            </div>
+          </div>
+
+          <!-- প্রশ্ন ৩০ -->
+          <div class="mcq-card" id="qCard-30">
+            <div class="question-title">৩০. পশ্চিম দিকে \(10\text{ m/s}\) বেগে ধাবমান একটি গাড়ির চালক উত্তর দিকে \(10\sqrt{3}\text{ m/s}\) বেগে একটি ট্রাক চলতে দেখল। ট্রাকটির প্রকৃত বেগ কত?</div>
+            <div class="options-grid">
+              <label class="option-label"><input type="radio" name="q30" value="A"> (ক) \(10\text{ m/s}\)</label>
+              <label class="option-label"><input type="radio" name="q30" value="B"> (খ) \(20\text{ m/s}\)</label>
+              <label class="option-label"><input type="radio" name="q30" value="C"> (গ) \(15\text{ m/s}\)</label>
+              <label class="option-label"><input type="radio" name="q30" value="D"> (ঘ) \(25\text{ m/s}\)</label>
+            </div>
+            <div class="solution-notes">
+              <h4>ব্যাখ্যা ও সমাধান:</h4>
+              • <span class="blue-heading">সঠিক উত্তর:</span> <span class="highlight">(খ) \(20\text{ m/s}\)</span>। গাড়ির বেগ \(\vec{v}_c = -10\hat{i}\)। আপেক্ষিক বেগ \(\vec{v}_{tc} = 10\sqrt{3}\hat{j}\)। ট্রাকের প্রকৃত বেগ \(\vec{v}_t = \vec{v}_{tc} + \vec{v}_c = -10\hat{i} + 10\sqrt{3}\hat{j}\)। প্রকৃত বেগের মান \(|\vec{v}_t| = \sqrt{(-10)^2 + (10\sqrt{3})^2} = \sqrt{100 + 300} = \sqrt{400} = 20\text{ m/s}\)।
             </div>
           </div>
 
@@ -850,7 +1075,7 @@
       <div class="result-summary">
         <h3 style="color: #0f172a; margin-bottom: 5px;">পরীক্ষা সম্পন্ন ও ফলাফল সংরক্ষিত হয়েছে!</h3>
         <p style="color: #64748b; font-size: 0.9rem;">আপনার প্রাপ্ত নম্বর:</p>
-        <div class="score-badge"><span id="scoreDisplayVal">0</span> <span style="font-size: 1.2rem; color: #64748b;">/ ২৫</span></div>
+        <div class="score-badge"><span id="scoreDisplayVal">0</span> <span style="font-size: 1.2rem; color: #64748b;">/ ৩০</span></div>
         <p style="font-size: 0.9rem; font-weight: 600; color: #0038a8; margin-top: 5px;">আপনার অবস্থান: <span id="userRankVal">-</span></p>
       </div>
 
@@ -886,7 +1111,7 @@
     <!-- গোল্ডেন ও ব্ল্যাক শেড ফুটার -->
     <div class="footer-notice">
       <span class="golden-text">Developed by Rimit</span> <br>
-      <span class="golden-text">Exam Question:Made by Rimit</span>
+      <span class="golden-text">Exam Question: Made by Rimit</span>
     </div>
   </div>
 
