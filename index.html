@@ -1,4 +1,4 @@
-```html
+
 <!DOCTYPE html>
 <html lang="bn">
 <head>
@@ -6,23 +6,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>HSC Physics Chapter 2: Vector MCQ Exam & Leaderboard</title>
   
-  <!-- Google Fonts for Notebook & Clean Text -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
   
-  <!-- MathJax for Rendering Math Equations -->
   <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
   <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 
-  <!-- Firebase SDKs (Modular v12) -->
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
-    import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
-    import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    // Firebase Configuration
-    const firebaseConfig = {
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
       apiKey: "AIzaSyAhfAmkKKvIpkHUkWH1rpWxnSCAmlNoCV8",
       authDomain: "ict-chapter5.firebaseapp.com",
       projectId: "ict-chapter5",
@@ -34,18 +30,17 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'vector-exam-v3';
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'vector-exam-v4';
 
     let currentUser = null;
     let userProfile = null;
     let isPracticeMode = false;
     
     let warningCount = 0;
-    const examDuration = 20 * 60; // 20 Minutes
+    const examDuration = 20 * 60;
     let totalSeconds = examDuration;
     let timerInterval = null;
 
-    // 25 Vector MCQ Correct Answer Key Map
     const correctAnswers = {
       q1: "C", q2: "B", q3: "C", q4: "B", q5: "B",
       q6: "C", q7: "B", q8: "B", q9: "A", q10: "B",
@@ -54,7 +49,6 @@
       q21: "B", q22: "B", q23: "C", q24: "B", q25: "B"
     };
 
-    // --- UI Helper Functions ---
     function showScreen(screenId) {
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('profileSetupScreen').style.display = 'none';
@@ -71,29 +65,47 @@
       document.getElementById('customModal').style.display = 'none';
     }
 
-    // --- Auth & Profile Logic ---
-    window.addEventListener('DOMContentLoaded', () => {
+    window.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result && result.user) {
+          currentUser = result.user;
+        }
+      } catch (err) {
+        console.error("Redirect login error:", err);
+      }
+
       onAuthStateChanged(auth, async (user) => {
         if (user) {
           currentUser = user;
           checkUserProfile(user.uid);
         } else {
+          // If no user is logged in, show login choice screen
           showScreen('loginScreen');
         }
       });
     });
+
+    window.startAnonymousSession = async function() {
+      try {
+        const cred = await signInAnonymously(auth);
+        currentUser = cred.user;
+        checkUserProfile(currentUser.uid);
+      } catch(err) {
+        showModal("অনামী প্রবেশে সমস্যা হয়েছে: " + err.message);
+      }
+    };
 
     window.googleSignIn = async function() {
       const provider = new GoogleAuthProvider();
       try {
         await signInWithPopup(auth, provider);
       } catch(e) {
-        if(e.code === 'auth/operation-not-allowed') {
-            showModal("ত্রুটি: Firebase থেকে Google Login enable করা নেই বা ডোমেইন Whitelist করা হয়নি।");
-        } else if(e.code === 'auth/popup-closed-by-user') {
-            // User closed the popup, do nothing
-        } else {
-            showModal("লগইন ত্রুটি: " + e.message);
+        console.log("Popup failed, trying redirect method...", e);
+        try {
+          await signInWithRedirect(auth, provider);
+        } catch(err) {
+          showModal("লগইন ত্রুটি: " + err.message);
         }
       }
     };
@@ -108,7 +120,7 @@
           loadDashboard();
         } else {
           showScreen('profileSetupScreen');
-          if(currentUser.displayName) {
+          if(currentUser && currentUser.displayName) {
              document.getElementById('studentNameInput').value = currentUser.displayName;
           }
         }
@@ -126,20 +138,18 @@
 
       try {
         const profileRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'profile');
-        const data = { name, college, email: currentUser.email };
+        const data = { name, college, email: currentUser.email || 'Anonymous' };
         await setDoc(profileRef, data);
         userProfile = data;
         loadDashboard();
       } catch(e) { showModal("প্রোফাইল সেভ করতে সমস্যা হয়েছে: " + e.message); }
     }
 
-    // --- Dashboard & Leaderboard ---
     async function loadDashboard() {
       showScreen('dashboardScreen');
       document.getElementById('dashUserName').innerText = userProfile.name;
       document.getElementById('dashUserCollege').innerText = userProfile.college;
 
-      // Check if official exam taken
       const examRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'exam_status');
       const examSnap = await getDoc(examRef);
 
@@ -165,7 +175,6 @@
         let lbData = [];
         snapshot.forEach(doc => lbData.push(doc.data()));
         
-        // Sorting in Javascript
         lbData.sort((a, b) => b.score - a.score);
 
         const tbody = document.getElementById('leaderboardBody');
@@ -178,7 +187,7 @@
 
         lbData.forEach((row, index) => {
           let tr = document.createElement('tr');
-          tr.className = row.uid === currentUser.uid ? 'my-row' : '';
+          tr.className = (currentUser && row.uid === currentUser.uid) ? 'my-row' : '';
           
           let medal = "";
           if(index === 0) medal = "🥇 ";
@@ -196,14 +205,12 @@
       }, (error) => { console.error("Leaderboard error", error); });
     }
 
-    // --- Exam Engine ---
     window.startExam = function(practice) {
       isPracticeMode = practice;
       warningCount = 0;
       totalSeconds = examDuration;
       document.getElementById('quizForm').reset();
       
-      // Hide solutions
       for (let i = 1; i <= 25; i++) {
         let sol = document.getElementById(`sol-q${i}`);
         if(sol) sol.style.display = 'none';
@@ -223,10 +230,7 @@
       }
       
       showScreen('examArea');
-      
-      // Trigger MathJax render for questions
       if (window.MathJax) MathJax.typesetPromise();
-      
       startTimer();
     }
 
@@ -240,7 +244,7 @@
             showModal("⚠️ সতর্কতা! একাধিকবার ট্যাব পরিবর্তন করার কারণে আপনার পরীক্ষা স্বয়ংক্রিয়ভাবে সাবমিট করা হলো।");
             submitExam(true);
           } else {
-            showModal(`⚠️ সতর্কবার্তা (${warningCount}/2): পরীক্ষা চলাকালীন ট্যাব পরিবর্তন করা সম্পূর্ণ নিষেধ! পুনরায় করলে পরীক্ষা বাতিল হবে।`);
+            showModal(`⚠️ সতর্কবার্তা (${warningCount}/2): পরীক্ষা চলাকালীন ট্যাব পরিবর্তন করা সম্পূর্ণ নিষেধ!`);
           }
         }
       };
@@ -265,7 +269,7 @@
 
     window.submitExam = async function(isTerminated = false) {
       if (timerInterval) clearInterval(timerInterval);
-      document.onvisibilitychange = null; // remove anti cheat listener
+      document.onvisibilitychange = null;
 
       let score = 0;
       for (let i = 1; i <= 25; i++) {
@@ -278,11 +282,9 @@
 
       if (!isPracticeMode && currentUser && userProfile) {
         try {
-          // Save private status
           const examRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'exam_status');
           await setDoc(examRef, { score: score, timestamp: serverTimestamp(), terminated: isTerminated });
 
-          // Save to Public Leaderboard
           const lbRef = doc(db, 'artifacts', appId, 'public', 'data', 'leaderboard', currentUser.uid);
           await setDoc(lbRef, {
             uid: currentUser.uid,
@@ -300,7 +302,6 @@
     function showSubmittedResult(score) {
       document.getElementById('btnContainer').style.display = 'none';
 
-      // Reveal solutions
       for (let i = 1; i <= 25; i++) {
         const solBox = document.getElementById(`sol-q${i}`);
         if (solBox) solBox.style.display = 'block';
@@ -313,11 +314,7 @@
       document.getElementById('scoreText').innerHTML = `${msg}<br/>প্রাপ্ত নম্বর: <span style="color: #0038a8; font-size: 1.8rem; font-weight:700;">${score}</span> / 25`;
 
       scoreCard.scrollIntoView({ behavior: 'smooth' });
-
-      // Trigger MathJax render for solutions
-      if (window.MathJax) {
-        MathJax.typesetPromise();
-      }
+      if (window.MathJax) MathJax.typesetPromise();
     }
 
     window.goBackToDashboard = function() {
@@ -342,54 +339,48 @@
     body { font-family: 'Hind Siliguri', sans-serif; background-color: var(--bg-color); color: #0f172a; line-height: 1.6; padding: 10px; }
     
     .container { max-width: 920px; margin: 0 auto; background: #ffffff; border-radius: 12px; box-shadow: 0 4px 25px rgba(0,0,0,0.08); overflow: hidden; min-height: 85vh; position: relative; }
-    .premium-badge { position: absolute; top: 0; right: 0; background: var(--badge-red); color: #fff; font-weight: 700; padding: 6px 18px; font-size: 0.85rem; border-bottom-left-radius: 10px; z-index: 100; }
     
     .header-banner { background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%); color: #fff; padding: 25px 20px 20px 20px; text-align: center; }
     .header-banner h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; color: #f8fafc; }
     .header-banner p { font-size: 0.95rem; color: #cbd5e1; }
 
-    /* Cards & Forms */
     .screen-section { padding: 30px 20px; display: none; }
     .card { max-width: 450px; margin: 0 auto; border: 1px solid #cbd5e1; border-radius: 12px; padding: 30px; background: #ffffff; box-shadow: 0 10px 25px rgba(0,0,0,0.05); text-align: center; }
     .form-group { margin-bottom: 18px; text-align: left; }
     .form-group label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 0.95rem; color: #334155; }
-    .form-group input { width: 100%; padding: 12px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 1rem; outline: none; transition: border 0.2s; }
+    .form-group input { width: 100%; padding: 12px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 1rem; outline: none; }
     .form-group input:focus { border-color: var(--blue-marker); }
     
-    .btn { padding: 12px 20px; font-size: 1.05rem; font-weight: 600; border-radius: 8px; cursor: pointer; border: none; width: 100%; margin-top: 10px; transition: opacity 0.2s; }
-    .btn:hover { opacity: 0.9; }
+    .btn { padding: 12px 20px; font-size: 1.05rem; font-weight: 600; border-radius: 8px; cursor: pointer; border: none; width: 100%; margin-top: 10px; }
+    .btn-anon { background: #0f172a; color: white; margin-bottom: 12px; }
     .btn-google { background: #ea4335; color: white; display: flex; align-items: center; justify-content: center; gap: 10px; }
     .btn-primary { background: var(--blue-marker); color: white; }
     .btn-outline { background: white; border: 2px solid var(--blue-marker); color: var(--blue-marker); }
 
-    /* Dashboard & Leaderboard */
     .dashboard-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-bottom: 25px; background: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; }
-    .lb-container { margin-top: 35px; border: 1px solid #cbd5e1; border-radius: 10px; overflow: hidden; background: white; box-shadow: 0 4px 6px rgba(0,0,0,0.02); }
-    .lb-title { background: #0f172a; color: white; padding: 15px; text-align: center; font-weight: 700; font-size: 1.1rem; letter-spacing: 0.5px; }
+    .lb-container { margin-top: 35px; border: 1px solid #cbd5e1; border-radius: 10px; overflow: hidden; background: white; }
+    .lb-title { background: #0f172a; color: white; padding: 15px; text-align: center; font-weight: 700; font-size: 1.1rem; }
     table { width: 100%; border-collapse: collapse; text-align: left; }
     th, td { padding: 14px 15px; border-bottom: 1px solid #e2e8f0; }
-    th { background: #f1f5f9; font-weight: 700; color: #475569; text-transform: uppercase; font-size: 0.85rem; }
+    th { background: #f1f5f9; font-weight: 700; color: #475569; font-size: 0.85rem; }
     tr:nth-child(even) { background-color: #f8fafc; }
     .my-row { background-color: #fef9c3 !important; }
     .lb-score { color: var(--blue-marker); font-weight: 700; font-size: 1.15rem; text-align: center;}
     .rank-badge { display: inline-block; background: #e2e8f0; padding: 2px 8px; border-radius: 12px; font-weight: bold; font-size: 0.9rem; }
 
-    /* Exam Area */
-    .timer-bar { position: sticky; top: 0; background: #ffffff; border-bottom: 2px solid var(--blue-marker); padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; z-index: 90; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+    .timer-bar { position: sticky; top: 0; background: #ffffff; border-bottom: 2px solid var(--blue-marker); padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; z-index: 90; }
     .timer-box { font-size: 1.25rem; font-weight: 700; color: var(--badge-red); background: #fef2f2; padding: 4px 16px; border-radius: 20px; border: 1px solid #fca5a5; }
     .warning-badge { font-size: 0.85rem; background: #fff7ed; color: #c2410c; padding: 4px 10px; border-radius: 6px; border: 1px solid #ffedd5; font-weight: 600; }
     
-    .score-card { display: none; background: #f0fdf4; border: 2px solid #22c55e; border-radius: 12px; padding: 25px; margin: 20px; text-align: center; box-shadow: 0 4px 15px rgba(34,197,94,0.1); }
+    .score-card { display: none; background: #f0fdf4; border: 2px solid #22c55e; border-radius: 12px; padding: 25px; margin: 20px; text-align: center; }
 
     .notebook-paper { background-color: var(--paper-bg); background-image: linear-gradient(var(--line-color) 1px, transparent 1px); background-size: 100% 28px; padding: 25px 20px 25px 40px; position: relative; border-left: 3px solid var(--margin-line); }
-    .notebook-paper::before { content: "@Rimit_Podder   •   NOTES OF RIMIT\A\A@Rimit_Podder   •   NOTES OF RIMIT\A\A@Rimit_Podder   •   NOTES OF RIMIT"; white-space: pre; position: absolute; top: 15%; left: 5%; width: 90%; height: 75%; font-size: 1.8rem; font-weight: 800; color: rgba(148, 163, 184, 0.11); transform: rotate(-28deg); pointer-events: none; z-index: 1; text-align: center; line-height: 3.5; }
 
-    .mcq-card { background: rgba(255, 255, 255, 0.95); border: 1px solid #cbd5e1; border-radius: 10px; padding: 20px; margin-bottom: 25px; position: relative; z-index: 2; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+    .mcq-card { background: rgba(255, 255, 255, 0.95); border: 1px solid #cbd5e1; border-radius: 10px; padding: 20px; margin-bottom: 25px; position: relative; z-index: 2; }
     .question-title { font-size: 1.1rem; font-weight: 700; color: var(--blue-marker); margin-bottom: 15px; }
     .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     @media (max-width: 580px) { .options-grid { grid-template-columns: 1fr; } }
-    .option-label { display: flex; align-items: center; padding: 10px 14px; background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 8px; cursor: pointer; font-size: 1rem; transition: border 0.2s, background 0.2s; }
-    .option-label:hover { background: #f8fafc; border-color: #cbd5e1; }
+    .option-label { display: flex; align-items: center; padding: 10px 14px; background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 8px; cursor: pointer; font-size: 1rem; }
     .option-label input { margin-right: 10px; accent-color: var(--blue-marker); transform: scale(1.1); }
 
     .solution-notes { display: none; margin-top: 18px; padding: 16px; background: #f0fdf4; border-left: 4px solid var(--green-gel); border-radius: 0 8px 8px 0; font-family: 'Kalam', 'Hind Siliguri', cursive; color: var(--green-gel); font-size: 1.05rem; }
@@ -400,14 +391,12 @@
 
     .footer-notice { text-align: center; padding: 15px; background: #0f172a; color: #f8fafc; font-size: 0.9rem; font-weight: 600; }
 
-    /* Custom Modal */
     .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.75); display: none; justify-content: center; align-items: center; z-index: 1000; backdrop-filter: blur(4px); }
-    .modal-content { background: white; padding: 30px; border-radius: 12px; max-width: 420px; text-align: center; width: 90%; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
+    .modal-content { background: white; padding: 30px; border-radius: 12px; max-width: 420px; text-align: center; width: 90%; }
   </style>
 </head>
 <body>
 
-  <!-- Custom Alert Modal -->
   <div class="modal-overlay" id="customModal">
     <div class="modal-content">
       <div style="font-size: 2rem; margin-bottom: 10px;">🔔</div>
@@ -417,26 +406,26 @@
   </div>
 
   <div class="container">
-    <div class="premium-badge">BY: @Rimit_Podder</div>
-
     <div class="header-banner">
       <h1>HSC Physics - অধ্যায় ২: ভেক্টর (Vector MCQ Exam)</h1>
-      <p>25 Board Based MCQs & Topper's Notes</p>
+      <p>25 Board Based MCQs & Solutions</p>
     </div>
 
-    <!-- Screen 1: Login -->
     <div id="loginScreen" class="screen-section" style="display: block;">
       <div class="card">
         <h3 style="color: var(--blue-marker); margin-bottom: 10px; font-size: 1.4rem;">স্বাগতম!</h3>
-        <p style="margin-bottom: 25px; color: #64748b; font-size: 0.95rem;">পরীক্ষায় অংশ নিতে এবং লিডারবোর্ডে নিজের অবস্থান দেখতে Google একাউন্ট দিয়ে সাইন-ইন করো।</p>
-        <button class="btn btn-google" onclick="googleSignIn()">
-          <svg style="width:20px; height:20px;" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-          Google দিয়ে সাইন-ইন
+        <p style="margin-bottom: 25px; color: #64748b; font-size: 0.95rem;">পরীক্ষায় অংশ নিতে সরাসরি প্রবেশ করো অথবা Google একাউন্ট দিয়ে সাইন-ইন করো।</p>
+        
+        <button class="btn btn-anon" onclick="startAnonymousSession()">
+          🚀 
+          পরীক্ষা শুরু করো 
         </button>
+
+        
+       
       </div>
     </div>
 
-    <!-- Screen 2: Profile Setup (Only once) -->
     <div id="profileSetupScreen" class="screen-section">
       <div class="card">
         <h3 style="color: var(--blue-marker); margin-bottom: 10px;">শিক্ষার্থীর তথ্য</h3>
@@ -453,7 +442,6 @@
       </div>
     </div>
 
-    <!-- Screen 3: Dashboard & Leaderboard -->
     <div id="dashboardScreen" class="screen-section">
       <div class="dashboard-header">
         <div style="margin-bottom: 15px;">
@@ -467,7 +455,7 @@
       </div>
 
       <div style="max-width: 400px; margin: 0 auto; text-align: center;">
-        <button id="officialBtn" class="btn btn-primary" style="padding: 15px; border-radius: 30px; font-size: 1.1rem; box-shadow: 0 4px 15px rgba(29, 78, 216, 0.3);" onclick="startExam(false)">Start Official Exam (একবারই দেওয়া যাবে)</button>
+        <button id="officialBtn" class="btn btn-primary" style="padding: 15px; border-radius: 30px; font-size: 1.1rem;" onclick="startExam(false)">Start Official Exam (একবারই দেওয়া যাবে)</button>
         <button id="practiceBtn" class="btn btn-outline" style="display:none; border-radius: 30px;" onclick="startExam(true)">Take Practice Exam (নাম্বার সেভ হবে না)</button>
       </div>
 
@@ -484,14 +472,12 @@
               </tr>
             </thead>
             <tbody id="leaderboardBody">
-              <!-- JS will populate this -->
             </tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- Screen 4: Exam Area -->
     <div id="examArea" style="display: none; background: #f8fafc;">
       <div class="timer-bar">
         <div style="font-weight:700; color:var(--blue-marker); font-size:1.1rem;" id="examTitle"></div>
@@ -508,8 +494,6 @@
 
       <div class="notebook-paper">
         <form id="quizForm">
-
-          <!-- Q1 -->
           <div class="mcq-card">
             <div class="question-title">১. নিচের কোনটি ভেক্টর রাশি নয়? (সি. বো. ২৪)</div>
             <div class="options-grid">
@@ -519,12 +503,11 @@
               <label class="option-label"><input type="radio" name="q1" value="D"> বল</label>
             </div>
             <div class="solution-notes" id="sol-q1">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
               • <span class="blue-heading">কাজ (Work):</span> কাজের মান ও দিক উভয়ই থাকার কথা মনে হলেও এটি স্কেলার রাশি, কারণ দুটি ভেক্টর রাশির ডট গুণফল সর্বদা <span class="highlight">স্কেলার রাশি</span> হয় (\( W = \vec{F} \cdot \vec{s} \))।
             </div>
           </div>
 
-          <!-- Q2 -->
           <div class="mcq-card">
             <div class="question-title">২. দুটি সমমানের ভেক্টরের লব্ধির মান তাদের যেকোনো একটির মানের সমান হলে ভেক্টরদ্বয়ের মধ্যবর্তী কোণ কত? (ঢাকা বো. ২৩)</div>
             <div class="options-grid">
@@ -534,14 +517,13 @@
               <label class="option-label"><input type="radio" name="q2" value="D"> \( 180^\circ \)</label>
             </div>
             <div class="solution-notes" id="sol-q2">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
               • <span class="blue-heading">বিশ্লেষণ:</span> \( P = Q = R \) হলে সামান্তরিকের সূত্রানুসারে \( \cos \alpha = -\frac{1}{2} \)<br/>
               • অতএব, <span class="highlight">\( \alpha = 120^\circ \)</span> ।
               <span class="trick-box">🎯 Memory Trick: সমান মানের দুই ভেক্টরের লব্ধি সমান হলে কোণ সবসময় ১২০°।</span>
             </div>
           </div>
 
-          <!-- Q3 -->
           <div class="mcq-card">
             <div class="question-title">৩. \( \vec{A} = 3\hat{i} - 4\hat{j} \) ভেক্টরটির মান কত? (যশোর বো. ২২)</div>
             <div class="options-grid">
@@ -551,12 +533,11 @@
               <label class="option-label"><input type="radio" name="q3" value="D"> 7 একক</label>
             </div>
             <div class="solution-notes" id="sol-q3">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
               • মান নির্ণয়: \( |\vec{A}| = \sqrt{3^2 + (-4)^2} = \sqrt{9 + 16} = \sqrt{25} = \mathbf{5} \) একক।
             </div>
           </div>
 
-          <!-- Q4 -->
           <div class="mcq-card">
             <div class="question-title">৪. দুটি ভেক্টরের ডট গুণফল শূন্য হলে ভেক্টরদ্বয় কীরূপে থাকে? (কুমিল্লা বো. ২১)</div>
             <div class="options-grid">
@@ -566,12 +547,11 @@
               <label class="option-label"><input type="radio" name="q4" value="D"> একই দিকে</label>
             </div>
             <div class="solution-notes" id="sol-q4">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
               • ডট গুণফল শূন্য (\( \vec{A} \cdot \vec{B} = 0 \)) মানে \( AB \cos 90^\circ = 0 \), অর্থাৎ ভেক্টরদ্বয় <span class="highlight">পরস্পর লম্ব</span>।
             </div>
           </div>
 
-          <!-- Q5 -->
           <div class="mcq-card">
             <div class="question-title">৫. দুটি ভেক্টরের ক্রস গুণফল শূন্য হলে ভেক্টরদ্বয় কীরূপে থাকে? (রাজশাহী বো. ২৩)</div>
             <div class="options-grid">
@@ -581,12 +561,11 @@
               <label class="option-label"><input type="radio" name="q5" value="D"> বিপরীতমুখী</label>
             </div>
             <div class="solution-notes" id="sol-q5">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
               • ক্রস গুণফল শূন্য (\( \vec{A} \times \vec{B} = 0 \)) মানে \( AB \sin 0^\circ = 0 \), অর্থাৎ ভেক্টরদ্বয় <span class="highlight">সমান্তরাল</span>।
             </div>
           </div>
 
-          <!-- Q6 -->
           <div class="mcq-card">
             <div class="question-title">৬. \( \hat{i} \times \hat{j} \) এর মান কত?</div>
             <div class="options-grid">
@@ -596,12 +575,11 @@
               <label class="option-label"><input type="radio" name="q6" value="D"> \( -\hat{k} \)</label>
             </div>
             <div class="solution-notes" id="sol-q6">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
               • চক্রীয় ক্রমে আয়ত একক ভেক্টরের ক্রস গুণন: <span class="highlight">\( \hat{i} \times \hat{j} = \hat{k} \)</span>।
             </div>
           </div>
 
-          <!-- Q7 -->
           <div class="mcq-card">
             <div class="question-title">৭. নদীর প্রস্থ 2 km, স্রোতের বেগ 3 km/h এবং নৌকার বেগ 6 km/h হলে ন্যূনতম সময়ে নদী পার হতে কত সময় লাগবে?</div>
             <div class="options-grid">
@@ -611,13 +589,12 @@
               <label class="option-label"><input type="radio" name="q7" value="D"> 1.00 hr</label>
             </div>
             <div class="solution-notes" id="sol-q7">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
               • ন্যূনতম সময়ের শর্তে \( \alpha = 90^\circ \) এ রওনা দিতে হয়।<br/>
               • \( t_{min} = \frac{d}{v} = \frac{2}{6} = \mathbf{0.33} \) hr (বা 20 মিনিট)।
             </div>
           </div>
 
-          <!-- Q8 -->
           <div class="mcq-card">
             <div class="question-title">৮. কোনো ভেক্টর ক্ষেত্রের কার্ল শূন্য হলে (\( \vec{\nabla} \times \vec{V} = 0 \)) ক্ষেত্রটিকে কী বলা হয়?</div>
             <div class="options-grid">
@@ -627,12 +604,11 @@
               <label class="option-label"><input type="radio" name="q8" value="D"> ভেক্টর ডাইভারজেন্স</label>
             </div>
             <div class="solution-notes" id="sol-q8">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
               • কার্ল শূন্য হলে ভেক্টর ক্ষেত্রটি <span class="highlight">অঘূর্ণনশীল (Irrotational)</span> ও সংরক্ষণশীল হয়।
             </div>
           </div>
 
-          <!-- Q9 -->
           <div class="mcq-card">
             <div class="question-title">৯. \( \vec{r} = x\hat{i} + y\hat{j} + z\hat{k} \) হলে \( \vec{\nabla} \cdot \vec{r} \) এর মান কত?</div>
             <div class="options-grid">
@@ -642,12 +618,11 @@
               <label class="option-label"><input type="radio" name="q9" value="D"> 0</label>
             </div>
             <div class="solution-notes" id="sol-q9">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
-              • \( \vec{\nabla} \cdot \vec{r} = (\frac{\partial}{\partial x}\hat{i} + \frac{\partial}{\partial y}\hat{j} + \frac{\partial}{\partial z}\hat{k}) \cdot (x\hat{i} + y\hat{j} + z\hat{k}) = 1 + 1 + 1 = \mathbf{3} \)।
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
+              • \( \vec{\nabla} \cdot \vec{r} = 1 + 1 + 1 = \mathbf{3} \)।
             </div>
           </div>
 
-          <!-- Q10 -->
           <div class="mcq-card">
             <div class="question-title">১০. দুটি সমান মানের ভেক্টরের লব্ধির মান এদের মানের \( \sqrt{3} \) গুণ হলে মধ্যবর্তী কোণ কত?</div>
             <div class="options-grid">
@@ -657,12 +632,11 @@
               <label class="option-label"><input type="radio" name="q10" value="D"> \( 120^\circ \)</label>
             </div>
             <div class="solution-notes" id="sol-q10">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
-              • \( R = P\sqrt{3} \) হলে \( 3P^2 = 2P^2 + 2P^2 \cos \alpha \Rightarrow 2 \cos \alpha = 1 \Rightarrow \alpha = 60^\circ \) ।
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
+              • \( R = P\sqrt{3} \) হলে \( \alpha = 60^\circ \) ।
             </div>
           </div>
 
-          <!-- Q11 -->
           <div class="mcq-card">
             <div class="question-title">১১. \( \vec{A} = 2\hat{i} - 3\hat{j} + \hat{k} \) এবং \( \vec{B} = 3\hat{i} + \hat{j} - 2\hat{k} \) হলে \( \vec{A} \cdot \vec{B} \) এর মান কত?</div>
             <div class="options-grid">
@@ -672,12 +646,11 @@
               <label class="option-label"><input type="radio" name="q11" value="D"> 3</label>
             </div>
             <div class="solution-notes" id="sol-q11">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
-              • \( \vec{A} \cdot \vec{B} = (2 \times 3) + (-3 \times 1) + (1 \times -2) = 6 - 3 - 2 = \mathbf{-1} \)।
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
+              • \( \vec{A} \cdot \vec{B} = 6 - 3 - 2 = \mathbf{-1} \)।
             </div>
           </div>
 
-          <!-- Q12 -->
           <div class="mcq-card">
             <div class="question-title">১২. একক ভেক্টরের মান কত হয়?</div>
             <div class="options-grid">
@@ -687,12 +660,11 @@
               <label class="option-label"><input type="radio" name="q12" value="D"> ±1</label>
             </div>
             <div class="solution-notes" id="sol-q12">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
-              • যে ভেক্টরের মান এক একক, তাকে একক ভেক্টর বলে। তাই এর মান <span class="highlight">1</span>।
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
+              • একক ভেক্টরের মান সর্বদা <span class="highlight">1</span>।
             </div>
           </div>
 
-          <!-- Q13 -->
           <div class="mcq-card">
             <div class="question-title">১৩. নাল ভেক্টরের দিক কেমন হয়?</div>
             <div class="options-grid">
@@ -702,12 +674,11 @@
               <label class="option-label"><input type="radio" name="q13" value="D"> লম্বালম্বি</label>
             </div>
             <div class="solution-notes" id="sol-q13">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
-              • শূন্য বা নাল ভেক্টরের মান শূন্য এবং এর দিক <span class="highlight">অনির্দিষ্ট</span> হয়।
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
+              • নাল ভেক্টরের দিক <span class="highlight">অনির্দিষ্ট</span> হয়।
             </div>
           </div>
 
-          <!-- Q14 -->
           <div class="mcq-card">
             <div class="question-title">১৪. সামান্তরিকের দুটি সন্নিহিত বাহু যথাক্রমে দুটি ভেক্টর নির্দেশ করলে তাদের ক্রস গুণফলের মান কী নির্দেশ করে?</div>
             <div class="options-grid">
@@ -717,12 +688,11 @@
               <label class="option-label"><input type="radio" name="q14" value="D"> আয়তন</label>
             </div>
             <div class="solution-notes" id="sol-q14">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
               • সামান্তরিকের ক্ষেত্রফল = <span class="highlight">\( |\vec{P} \times \vec{Q}| \)</span>।
             </div>
           </div>
 
-          <!-- Q15 -->
           <div class="mcq-card">
             <div class="question-title">১৫. \( \vec{A} = 2\hat{i} + m\hat{j} + \hat{k} \) এবং \( \vec{B} = 4\hat{i} - 2\hat{j} - 2\hat{k} \) পরস্পর লম্ব হলে m এর মান কত?</div>
             <div class="options-grid">
@@ -732,12 +702,11 @@
               <label class="option-label"><input type="radio" name="q15" value="D"> 4</label>
             </div>
             <div class="solution-notes" id="sol-q15">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
-              • লম্ব হলে ডট গুণফল শূন্য হবে: \( (2)(4) + (m)(-2) + (1)(-2) = 0 \Rightarrow 8 - 2m - 2 = 0 \Rightarrow 2m = 6 \Rightarrow \mathbf{m = 3} \)。
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
+              • লম্ব শর্তে ডট গুণফল শূন্য হবে, ফলে <span class="highlight">m = 3</span>।
             </div>
           </div>
 
-          <!-- Q16 -->
           <div class="mcq-card">
             <div class="question-title">১৬. তিনটি ভেক্টর একই সমতলে অবস্থান করার শর্ত কী?</div>
             <div class="options-grid">
@@ -747,12 +716,11 @@
               <label class="option-label"><input type="radio" name="q16" value="D"> \( \vec{A} \times \vec{B} = 0 \)</label>
             </div>
             <div class="solution-notes" id="sol-q16">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
-              • তিনটি ভেক্টরের স্কেলার ত্রিক গুণফল শূন্য হলে (<span class="highlight">\( \vec{A} \cdot (\vec{B} \times \vec{C}) = 0 \)</span>) তারা একই সমতলে থাকে।
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
+              • শর্ত: <span class="highlight">\( \vec{A} \cdot (\vec{B} \times \vec{C}) = 0 \)</span>।
             </div>
           </div>
 
-          <!-- Q17 -->
           <div class="mcq-card">
             <div class="question-title">১৭. নদীর স্রোতের সাথে কত কোণে নৌকা চালালে নদীটি সর্বনিম্ন দূরত্বে পার হওয়া যাবে?</div>
             <div class="options-grid">
@@ -762,12 +730,11 @@
               <label class="option-label"><input type="radio" name="q17" value="D"> \( 180^\circ \)</label>
             </div>
             <div class="solution-notes" id="sol-q17">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
-              • সর্বনিম্ন দূরত্বে (সোজাসুজি) পার হতে হলে \( \alpha = \cos^{-1}\left(-\frac{u}{v}\right) \) কোণে রওনা হতে হয়।
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
+              • সর্বনিম্ন দূরত্বে পার হতে \( \alpha = \cos^{-1}\left(-\frac{u}{v}\right) \) কোণে রওনা হতে হয়।
             </div>
           </div>
 
-          <!-- Q18 -->
           <div class="mcq-card">
             <div class="question-title">১৮. নিচের কোনটি ভেক্টর অপারেটর বা ডেল (Del) অপারেটর?</div>
             <div class="options-grid">
@@ -777,12 +744,11 @@
               <label class="option-label"><input type="radio" name="q18" value="D"> \( \frac{d}{dx} \)</label>
             </div>
             <div class="solution-notes" id="sol-q18">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
               • ডেল অপারেটর: <span class="highlight">\( \vec{\nabla} = \hat{i}\frac{\partial}{\partial x} + \hat{j}\frac{\partial}{\partial y} + \hat{k}\frac{\partial}{\partial z} \)</span>।
             </div>
           </div>
 
-          <!-- Q19 -->
           <div class="mcq-card">
             <div class="question-title">১৯. কোনো স্কেলার ক্ষেত্রের গ্রেডিয়েন্ট হলো একটি—</div>
             <div class="options-grid">
@@ -792,12 +758,11 @@
               <label class="option-label"><input type="radio" name="q19" value="D"> নাল ভেক্টর</label>
             </div>
             <div class="solution-notes" id="sol-q19">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
-              • স্কেলার ক্ষেত্রের গ্রেডিয়েন্ট ডেল অপারেটরের স্কেলার গুণনের মাধ্যমে <span class="highlight">ভেক্টর রাশি</span> তৈরি করে।
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
+              • গ্রেডিয়েন্ট হলো একটি <span class="highlight">ভেক্টর রাশি</span>।
             </div>
           </div>
 
-          <!-- Q20 -->
           <div class="mcq-card">
             <div class="question-title">২০. কোনো ভেক্টর ক্ষেত্রের ডাইভারজেন্স হলো একটি—</div>
             <div class="options-grid">
@@ -807,12 +772,11 @@
               <label class="option-label"><input type="radio" name="q20" value="D"> অক্ষীয় ভেক্টর</label>
             </div>
             <div class="solution-notes" id="sol-q20">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
-              • ডাইভারজেন্স ডেল ও ভেক্টরের ডট গুণফল হওয়ায় এর ফলাফল সর্বদা একটি <span class="highlight">স্কেলার রাশি</span>।
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
+              • ডাইভারজেন্স হলো একটি <span class="highlight">স্কেলার রাশি</span>।
             </div>
           </div>
 
-          <!-- Q21 -->
           <div class="mcq-card">
             <div class="question-title">২১. ট্রলির হাতল লম্বা রাখা হয় কেন?</div>
             <div class="options-grid">
@@ -822,12 +786,11 @@
               <label class="option-label"><input type="radio" name="q21" value="D"> গতি থামানোর জন্য</label>
             </div>
             <div class="solution-notes" id="sol-q21">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
-              • হাতল লম্বা করলে অনুভূমিক কোণ কমে যায়, ফলে \( F \cos \theta \) উপাংশ বৃদ্ধি পেয়ে ট্রলি টানা সহজ হয়।
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
+              • অনুভূমিক উপাংশ বাড়িয়ে ট্রলি টানা সহজ করতে।
             </div>
           </div>
 
-          <!-- Q22 -->
           <div class="mcq-card">
             <div class="question-title">২২. \( \hat{j} \cdot \hat{k} \) এর মান কত?</div>
             <div class="options-grid">
@@ -837,12 +800,11 @@
               <label class="option-label"><input type="radio" name="q22" value="D"> -1</label>
             </div>
             <div class="solution-notes" id="sol-q22">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
-              • ভিন্ন ভিন্ন লম্ব একক ভেক্টরের ডট গুণফল সর্বদা <span class="highlight">0</span> হয়।
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
+              • লম্ব একক ভেক্টরের ডট গুণফল সর্বদা <span class="highlight">0</span> হয়।
             </div>
           </div>
 
-          <!-- Q23 -->
           <div class="mcq-card">
             <div class="question-title">২৩. দুটি ভেক্টরের যোগফল ও বিয়োগফলের মান সমান হলে এদের মধ্যবর্তী কোণ কত?</div>
             <div class="options-grid">
@@ -852,12 +814,11 @@
               <label class="option-label"><input type="radio" name="q23" value="D"> \( 180^\circ \)</label>
             </div>
             <div class="solution-notes" id="sol-q23">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
-              • \( |\vec{A} + \vec{B}| = |\vec{A} - \vec{B}| \) হলে \( 4AB \cos \theta = 0 \Rightarrow \mathbf{\theta = 90^\circ} \)।
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
+              • মধ্যবর্তী কোণ <span class="highlight">\( 90^\circ \)</span>।
             </div>
           </div>
 
-          <!-- Q24 -->
           <div class="mcq-card">
             <div class="question-title">২৪. বৃষ্টি থেকে রক্ষা পেতে চলন্ত ব্যক্তির ছাতা কোন দিকে ঝোঁকাতে হয়?</div>
             <div class="options-grid">
@@ -867,12 +828,11 @@
               <label class="option-label"><input type="radio" name="q24" value="D"> ডানে</label>
             </div>
             <div class="solution-notes" id="sol-q24">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
-              • আপেক্ষিক বেগের কারণে চলন্ত ব্যক্তির দিকে বৃষ্টির বেগ তির্যকভাবে অনুভূত হয়, তাই তাকে <span class="highlight">সামনের দিকে</span> ছাতা ঝোঁকাতে হয়।
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
+              • আপেক্ষিক বেগের কারণে <span class="highlight">সামনের দিকে</span> ছাতা ঝোঁকাতে হয়।
             </div>
           </div>
 
-          <!-- Q25 -->
           <div class="mcq-card">
             <div class="question-title">২৫. একটি ভেক্টরের পাদবিন্দু ও শীর্ষবিন্দু একই বিন্দুতে হলে তাকে কী বলে?</div>
             <div class="options-grid">
@@ -882,8 +842,8 @@
               <label class="option-label"><input type="radio" name="q25" value="D"> অবস্থান ভেক্টর</label>
             </div>
             <div class="solution-notes" id="sol-q25">
-              <h4>ব্যাখ্যা ও তোপারের হ্যান্ডরাইটিং নোটস:</h4>
-              • পাদবিন্দু ও শীর্ষবিন্দু একই হলে তাকে <span class="highlight">নাল বা শূন্য ভেক্টর</span> বলে।
+              <h4>ব্যাখ্যা ও সলিউশন নোটস:</h4>
+              • পাদবিন্দু ও শীর্ষবিন্দু একই হলে তাকে <span class="highlight">নাল ভেক্টর</span> বলে।
             </div>
           </div>
 
@@ -895,10 +855,10 @@
       </div>
     </div>
 
-    <!-- Commercial Footer Notice -->
-    <div class="footer-notice">বাণিজ্যিক ভাবে ব্যবহার নিষিদ্ধ</div>
+    <div class="footer-notice">
+      বাণিজ্যিক ভাবে ব্যবহার নিষিদ্ধ &nbsp;|&nbsp; Developed by Rimit
+    </div>
   </div>
 
 </body>
 </html>
-```
